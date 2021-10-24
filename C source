@@ -1,0 +1,150 @@
+// evaluates proposition in order to find if it is well formed using the graph based algorithm
+// sorry it's not in python, I don't know enough of it yet but I'll come back when I do
+#include <iostream>
+#include <string.h>
+using namespace std;
+
+struct Node
+{
+	char symbol = 0;
+	int father = -1, leaf[2] = { -1 };
+
+	void construct(const char s, const int f, const int l1, const int l2)
+	{
+		symbol = s;
+		father = f;
+		leaf[0] = l1;
+		leaf[1] = l2;
+	}
+	void deconstruct()
+	{
+		symbol = 0;
+		father = -1;
+		leaf[0] = -1;
+		leaf[1] = -1;
+	}
+	bool append(const char s)
+	{
+		if (symbol != 0)
+			return 0;
+		symbol = s;
+		return 1;
+	}
+};
+
+int getFreeNode(Node node[], int size)
+{ //return first unused node from the list
+	for (int i = 1; i < size; i++)
+	{
+		if (node[i].symbol == 0 && node[i].father == -1)
+			return i;
+	}
+	return -1;
+}
+
+int main()
+{
+	Node node[100];
+	int pos = 0;
+
+  //read string
+	char inputLine[101];
+	cin.getline(inputLine, 100);
+
+  //add first node
+	node[0].construct(0, -1, -1, -1);
+	cout << "Node 0 constructed.\n";
+
+	for (int i = 0; inputLine[i]; i++)
+	{
+		if (inputLine[i] == '(')
+		{ //add new node, connect it to previous node
+			node[pos].leaf[0] = pos + 1;
+			pos++;
+			node[pos].construct(0, pos - 1, -1, -1);
+			cout << i << ": '('   New node (" << pos << ") constructed, position set to " << pos << ".\n";
+		}
+		else if (inputLine[i] == ')')
+		{ //move back one node
+			if (node[pos].symbol == 0)
+            {
+				cout << i << ": ')'   Error: A proposition was expected.\n";
+				break;
+            }
+			else
+			{
+				pos = node[pos].father;
+				cout << i << ": ')'   Position set to "<<pos<<".\n";
+			}
+		}
+		else if (inputLine[i] == '!')
+		{ //append '!' to past node
+			node[pos].leaf[0] = pos + 1;
+			if (!node[pos - 1].append('!'))
+            {
+				cout << i << ": '!'   Error: Node already appended.\n";
+				break;
+            }
+			else
+			{
+				cout << i << ": '!'   Symbol appended to node (" << pos - 1 << ").\n";
+			}
+		}
+		else if (inputLine[i] == 'v' || inputLine[i] == '^' || inputLine[i] == '>' || inputLine[i] == '=')
+		{ //create a new leaf on the current node and move to it
+			if (node[pos].leaf[0] == -1)
+            {
+				cout << i << ": '"<< inputLine[i] <<"'   Error: A proposition was expected.\n";
+				break;
+            }
+			else
+			{
+				int auxPos = getFreeNode(node, 100);
+				if (!node[pos].append(inputLine[i]))
+                {
+					cout << i << ": '"<< inputLine[i] <<"'   Error: Node already appended.\n";
+					break;
+                }
+				else
+				{
+					node[pos].leaf[1] = auxPos;
+					node[auxPos].construct(0, pos, -1, -1);
+					pos = auxPos;
+					cout << i << ": '" << inputLine[i] << "'   New node(" << pos << ") constructed, position set to " << pos << ".\n";
+				}
+			}
+		}
+		else if (inputLine[i] >= 'A' && inputLine[i] <= 'Z')
+		{ //append atomic proposition and move to previous node
+			if(!node[pos].append(inputLine[i]))
+            {
+				cout << i << ": '" << inputLine[i] << "'   Error: Node already appended.\n";
+				break;
+            }
+			else
+			{
+				pos = node[pos].father;
+				cout << i << ": '"<< inputLine[i] <<"'   Position set to " << pos << ".\n";
+			}
+		}
+		else
+		{
+			cout << i << ": '" << inputLine[i] << "'   Error: Unknown syntax.\n";
+			break;
+		}
+	}
+
+	//output
+	if (pos != -1)
+		cout << "Error: Proposition is incomplete, last position was " << pos << ".\n";
+	else
+	{
+		cout << "Proposition is well formed.\n";
+		for (int i = 0; i < 100; i++)
+			if (node[i].symbol != 0)
+				cout << i << ' ' << node[i].symbol << "   leafs: " << node[i].leaf[0] << ',' << node[i].leaf[1] << '\n';
+	}
+	//pause
+	getchar();
+	return 0;
+}
