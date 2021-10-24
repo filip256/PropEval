@@ -1,5 +1,15 @@
 // evaluates proposition in order to find if it is well formed using the graph based algorithm
 // sorry it's not in python, I don't know enough of it yet but I'll come back when I do
+
+// Symbols:
+// - atomic proposition: A-Z
+// - parentheses: (, )
+// - NOT: !
+// - AND: ^
+// - OR: v
+// - IMPLICATION: >
+// - EQUIVALENCE: =
+
 #include <iostream>
 #include <string.h>
 using namespace std;
