@@ -1,0 +1,68 @@
+// A prototype of the first program, now made in python
+// Created during an algorithm discution with Emanuel, Catalina and Carla
+
+class Node:
+
+    symbol = ''
+    father = -1
+    leaf1 = -1
+    leaf2 = -1
+    def _init_(self, symb, fath):
+        self.symbol = symb
+        self.father = fath
+        
+    def addSymbol(self, symb):
+        if self.symbol == '':
+            self.symbol = symb
+            return True
+        else:
+            return False
+
+
+if __name__=='__main__':
+    string = input()
+    pos = 0
+    nodes = []
+    nod = Node('', -1)
+    nodes.append(nod)
+    
+    ok = True
+    for i in range(len(string)):
+        if string[i] == '(':
+            nod = Node('', pos)
+            nodes.append(nod)
+            nodes[pos].leaf1 = pos + 1
+            pos += 1
+        elif string[i] == ')':
+            pos = nodes[pos].father
+        elif string[i] >= 'A' and  string[i] <= 'Z':
+            if nodes[pos].addSymbol(string[i]) == False:
+                print("Error!1")
+                ok = False
+                break
+            pos = nodes[pos].father
+        elif string[i] == '!':
+            if nodes[nodes[pos].father].addSymbol(string[i]) == False:
+                print("Error!2")
+                ok = False
+                break
+        elif string[i] in '>v^=':
+            if nodes[pos].addSymbol(string[i]) == False:
+                print("Error!3")
+                ok = False
+                break
+            nod = Node('', pos)
+            nodes.append(nod)
+            nodes[pos].leaf2 = len(nodes) - 1
+            pos = len(nodes) - 1
+        else:
+            print("Error!4")
+            ok = False
+            break
+       
+    for i in range(len(nodes)):
+        print(i, nodes[i].symbol, nodes[i].leaf1, nodes[i].leaf2)
+    if ok and pos == -1 and nodes[0].symbol != '':
+        print("Well-formed!")
+    else:
+        print("Error!")
