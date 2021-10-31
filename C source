@@ -1,5 +1,5 @@
-// evaluates proposition in order to find if it is well formed using the graph based algorithm
-// sorry it's not in python, I don't know enough of it yet but I'll come back when I do
+// Logic proposition evaluator, available in python too
+// Spaces are now ignored.
 
 // Symbols:
 // - atomic proposition: A-Z
@@ -10,6 +10,11 @@
 // - IMPLICATION: >
 // - EQUIVALENCE: =
 
+// Interpretions can be added by the following syntax:
+//   [expresion] | {definition for I1} {definition for I2}...
+// Example:
+//   ((P=Q)=(!(P=(!Q)))) | {!P,!Q} {!P,Q} {P,!Q} {P,Q}
+
 #include <iostream>
 #include <string.h>
 using namespace std;
@@ -18,6 +23,7 @@ struct Node
 {
 	char symbol = 0;
 	int father = -1, leaf[2] = { -1 };
+	bool value = false, isInterpreted = false;
 
 	void construct(const char s, const int f, const int l1, const int l2)
 	{
@@ -32,6 +38,13 @@ struct Node
 		father = -1;
 		leaf[0] = -1;
 		leaf[1] = -1;
+		value = false;
+		isInterpreted = false;
+	}
+	void addInterpret(bool b)
+	{
+		isInterpreted = true;
+		value = b;
 	}
 	bool append(const char s)
 	{
@@ -42,7 +55,9 @@ struct Node
 	}
 };
 
-int getFreeNode(Node node[], int size)
+Node node[100];
+
+int getFreeNode(Node node[], const int size)
 { //return first unused node from the list
 	for (int i = 1; i < size; i++)
 	{
@@ -52,22 +67,89 @@ int getFreeNode(Node node[], int size)
 	return -1;
 }
 
+bool recInt(int pos)
+{ //recursive function for truth evaluating propositions
+	if (node[pos].symbol == '!')
+	{
+		bool ls = recInt(node[pos].leaf[0]);
+		cout << pos << " " << node[pos].symbol << " is " << !ls<<".\n";
+		return !ls;
+	}
+	else if (node[pos].symbol == '^')
+	{
+		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
+		cout << pos << " " << node[pos].symbol << " is " << ls * rs << ".\n";
+		return ls * rs;
+	}
+	else if (node[pos].symbol == 'v')
+	{
+		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
+		cout << pos << " " << node[pos].symbol << " is " << bool(ls + rs) << ".\n";
+		return ls + rs;
+	}
+	else if (node[pos].symbol == '>')
+	{
+		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
+		if (ls && !rs)
+		{
+			cout << pos << " " << node[pos].symbol << " is 0.\n";
+			return false;
+		}
+		cout << pos << " " << node[pos].symbol << " is 1.\n";
+		return true;
+	}
+	else if (node[pos].symbol == '=')
+	{
+		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
+		if (ls != rs)
+		{
+			cout << pos << " " << node[pos].symbol << " is 0.\n";
+			return false;
+		}
+		cout << pos << " " << node[pos].symbol << " is 1.\n";
+		return true;
+	}
+	else
+	{
+		cout << pos << " " << node[pos].symbol << " is ";
+		if (!node[pos].value)
+			cout << "0 (interpreted atomic).\n";
+		else
+			cout << "1 (interpreted atomic).\n";
+		return node[pos].value;
+	}
+}
+
+bool insertChar(char s[], const char c, const int pos)
+{
+	if (pos > strlen(s) + 1)
+		return 0;
+	for (int i = strlen(s); i >= pos; i--)
+		s[i + 1] = s[i];
+	s[pos] = c;
+	cout << "insLog: inserted " << c << " at " << pos <<" : "<<s<<".\n";
+	return 1;
+}
+
 int main()
 {
-	Node node[100];
-	int pos = 0;
+	int pos = 0, atoms[26][100];
+	for (int i = 0; i < 26; i++) for (int j = 0; j < 100; j++) atoms[i][j] = -1;
 	bool error = false;
 
 	//read string
-	char inputLine[101];
-	cin.getline(inputLine, 100);
+	char inputLine[1001];
+	cin.getline(inputLine, 1000);
 
 	//add first node
 	node[0].construct(0, -1, -1, -1);
 	cout << "Node 0 constructed.\n";
 
-	for (int i = 0; inputLine[i]; i++)
+	int i = 0;
+	while(inputLine[i] != 0)
 	{
+		while (inputLine[i] == ' ') i++; //ignore spaces
+
 		if (inputLine[i] == '(')
 		{ //add new node, connect it to previous node
 			node[pos].leaf[0] = pos + 1;
@@ -125,7 +207,7 @@ int main()
 					node[pos].leaf[1] = auxPos;
 					node[auxPos].construct(0, pos, -1, -1);
 					pos = auxPos;
-					cout << i << ": '" << inputLine[i] << "'   New node(" << pos << ") constructed, position set to " << pos << ".\n";
+					cout << i << ": '" << inputLine[i] << "'   New node (" << pos << ") constructed, position set to " << pos << ".\n";
 				}
 			}
 		}
@@ -139,19 +221,26 @@ int main()
 			}
 			else
 			{
+				//save the nodes containing atoms for interpretation
+				int k = 0; while (k < 100 && atoms[inputLine[i] - 'A'][k] != -1) k++;
+				atoms[inputLine[i] - 'A'][k] = pos;
+
 				pos = node[pos].father;
 				cout << i << ": '" << inputLine[i] << "'   Position set to " << pos << ".\n";
 			}
 		}
+		else if (inputLine[i] == '|') break;
 		else
 		{
 			cout << i << ": '" << inputLine[i] << "'   Error: Unknown syntax.\n";
 			error = true;
 			break;
 		}
+		i++;
 	}
 
-	//output
+
+	//evaluation output
 	if (pos != -1 || error)
 		cout << "Error: Proposition is ill-defined.\n";
 	else
@@ -161,6 +250,57 @@ int main()
 			if (node[i].symbol != 0)
 				cout << i << ' ' << node[i].symbol << "   leafs: " << node[i].leaf[0] << ',' << node[i].leaf[1] << '\n';
 	}
+
+	//interpretations
+	if (inputLine[i] != 0)
+		cout << "Logic evaluation based on given interpretations:\n";
+	else
+		cout << "No interpretations were given.\n";
+	while (inputLine[i] != 0)// read interpretations
+	{
+		while (inputLine[i] == ' ') i++; //ignore spaces
+
+		if (inputLine[i] == '{')
+		{
+			bool b = true;
+			while (inputLine[i] && inputLine[i] != '}') //reading an interpretation
+			{
+				i++;
+				if (inputLine[i] == '!')
+					b = false;
+				else if (inputLine[i] >= 'A' && inputLine[i] <= 'Z')
+				{
+					if (atoms[inputLine[i] - 'A'][0] != -1)
+					{
+						int k = 0;
+						while (k < 100 && atoms[inputLine[i] - 'A'][k] != -1)
+						{
+							node[atoms[inputLine[i] - 'A'][k]].addInterpret(b);
+							k++;
+						}
+						b = true;
+					}
+					else
+						cout << "Error: '" << inputLine[i] << "' is not an atom in the given proposition.\n";
+				}
+			}
+			bool ok = true;
+			for (int i = 0; i < 100; i++) //check that all are interpreted
+				if (node[i].symbol >= 'A' && node[i].symbol <= 'Z' && !node[i].isInterpreted)
+				{
+					ok = false;
+					break;
+				}
+			if (ok)
+			{
+				cout<<"Truth value: "<< recInt(0)<<".\n";
+			}
+			else
+				cout << "Error: Some atoms lack interpretation.\n";
+		}
+		i++;
+	}
+
 	//pause
 	getchar();
 	return 0;
