@@ -1,8 +1,10 @@
-// Logic proposition evaluator, available in python too
+// Logic proposition evaluator.
 // Spaces are now ignored.
 
 // Symbols:
 // - atomic proposition: A-Z
+// - contradiction: f
+// - tautology: t
 // - parentheses: (, )
 // - NOT: !
 // - AND: ^
@@ -13,9 +15,17 @@
 // Interpretions can be added by the following syntax:
 //   [expresion] | {definition for I1} {definition for I2}...
 // Example:
-//   ((P=Q)=(!(P=(!Q)))) | {!P,!Q} {!P,Q} {P,!Q} {P,Q}
+//   ((P=Q)=(!(P=(!Q)))) | {!P,!Q} {P,!Q} {P,Q}
+// Option:
+//   [expresion] | @
+//       generates all possible interpretations
+
+// A graphical representation of the tree can now be opbained using DrawBinTree.exe (line 861).
+// DrawBinTree.exe and it's source can be found here:
+// Make sure DrawBinTree.exe is in the working dir of the main program.
 
 #include <iostream>
+#include <Windows.h>
 #include <string.h>
 using namespace std;
 
@@ -55,9 +65,19 @@ struct Node
 	}
 };
 
-Node node[100];
+struct TableColumn
+{
+	char exp[1001] = { 0 };
+	int valueNumber;
+	bool values[256];
+};
 
-int getFreeNode(Node node[], const int size)
+Node node[100];
+TableColumn table[1001];
+int atoms[26][1000];
+char treeString[100][100];
+
+int getFreeNode(const int size)
 { //return first unused node from the list
 	for (int i = 1; i < size; i++)
 	{
@@ -67,24 +87,36 @@ int getFreeNode(Node node[], const int size)
 	return -1;
 }
 
+int getAtomCount()
+{
+	int c = 0;
+	for (int i = 0; i < 26; i++)
+		if (atoms[i][0] != -1)
+			c++;
+	return c;
+}
+
 bool recInt(int pos)
-{ //recursive function for truth evaluating propositions
+{
 	if (node[pos].symbol == '!')
 	{
 		bool ls = recInt(node[pos].leaf[0]);
-		cout << pos << " " << node[pos].symbol << " is " << !ls<<".\n";
+		//cout << pos << " " << node[pos].symbol << " is " << !ls<<".\n";
+		node[pos].value = !ls;
 		return !ls;
 	}
 	else if (node[pos].symbol == '^')
 	{
 		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
-		cout << pos << " " << node[pos].symbol << " is " << ls * rs << ".\n";
+		//cout << pos << " " << node[pos].symbol << " is " << ls * rs << ".\n";
+		node[pos].value = ls * rs;
 		return ls * rs;
 	}
 	else if (node[pos].symbol == 'v')
 	{
 		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
-		cout << pos << " " << node[pos].symbol << " is " << bool(ls + rs) << ".\n";
+		//cout << pos << " " << node[pos].symbol << " is " << bool(ls + rs) << ".\n";
+		node[pos].value = ls + rs;
 		return ls + rs;
 	}
 	else if (node[pos].symbol == '>')
@@ -92,10 +124,12 @@ bool recInt(int pos)
 		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
 		if (ls && !rs)
 		{
-			cout << pos << " " << node[pos].symbol << " is 0.\n";
+			//cout << pos << " " << node[pos].symbol << " is 0.\n";
+			node[pos].value = false;
 			return false;
 		}
-		cout << pos << " " << node[pos].symbol << " is 1.\n";
+		//cout << pos << " " << node[pos].symbol << " is 1.\n";
+		node[pos].value = true;
 		return true;
 	}
 	else if (node[pos].symbol == '=')
@@ -103,185 +137,303 @@ bool recInt(int pos)
 		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
 		if (ls != rs)
 		{
-			cout << pos << " " << node[pos].symbol << " is 0.\n";
+			//cout << pos << " " << node[pos].symbol << " is 0.\n";
+			node[pos].value = false;
 			return false;
 		}
-		cout << pos << " " << node[pos].symbol << " is 1.\n";
+		//cout << pos << " " << node[pos].symbol << " is 1.\n";
+		node[pos].value = true;
 		return true;
 	}
-	else
+	else if(node[pos].symbol >= 'A' && node[pos].symbol <= 'Z')
 	{
-		cout << pos << " " << node[pos].symbol << " is ";
+		//cout << pos << " " << node[pos].symbol << " is ";
+		/*
 		if (!node[pos].value)
 			cout << "0 (interpreted atomic).\n";
 		else
 			cout << "1 (interpreted atomic).\n";
+		*/
 		return node[pos].value;
+	}
+	else
+	{
+		//cout << pos << " " << node[pos].symbol << " is ";
+		if (!node[pos].value)
+			cout << "0 (contradiction).\n";
+		else
+			cout << "1 (tautology).\n";
+		return node[pos].value;
+	}
+}
+
+void getTreeDepth(int pos, int currentD, int &maxD)
+{
+	if (currentD > maxD)
+		maxD = currentD;
+
+	if (node[pos].symbol == '!')
+		getTreeDepth(node[pos].leaf[0], currentD + 1, maxD);
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	{
+		getTreeDepth(node[pos].leaf[0], currentD + 1, maxD);
+		getTreeDepth(node[pos].leaf[1], currentD + 1, maxD);
+	}
+}
+
+void recTreeString(int pos, int x, int y)
+{
+	if (node[pos].symbol == '!')
+	{
+		treeString[y][x] = '!';
+
+		int depth = 0;
+		getTreeDepth(pos, 0, depth);
+
+		for(int i = 0; i < depth; i++)
+			treeString[y + i + 1][x - i - 1] = '/';
+		recTreeString(node[pos].leaf[0], x - depth - 1, y + depth + 1);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	{
+		treeString[y][x] = node[pos].symbol;
+
+		int depth = 0;
+		getTreeDepth(pos, 0, depth);
+
+		for (int i = 0; i < depth; i++)
+		{
+			treeString[y + i + 1][x - i - 1] = '/';
+			treeString[y + i + 1][x + i + 1] = '\\';
+		}
+		recTreeString(node[pos].leaf[0], x - depth - 1, y + depth + 1);
+		recTreeString(node[pos].leaf[1], x + depth + 1, y + depth + 1);
+	}
+	else if (node[pos].symbol >= 'A' && node[pos].symbol <= 'Z' || node[pos].symbol == 'f' || node[pos].symbol == 't')
+	{
+		treeString[y][x] = node[pos].symbol;
 	}
 }
 
 bool insertChar(char s[], const char c, const int pos)
 {
-	if (pos > strlen(s) + 1)
-		return 0;
+	if (pos > strlen(s) + 1 || pos < 0)
+		return false;
 	for (int i = strlen(s); i >= pos; i--)
 		s[i + 1] = s[i];
 	s[pos] = c;
-	cout << "insLog: inserted " << c << " at " << pos <<" : "<<s<<".\n";
-	return 1;
+	//cout << "insLog: inserted " << c << " at " << pos <<" : "<<s<<".\n";
+	return true;
 }
 
-int main()
+bool popChar(char s[], const int pos)
 {
-	int pos = 0, atoms[26][100];
-	for (int i = 0; i < 26; i++) for (int j = 0; j < 100; j++) atoms[i][j] = -1;
-	bool error = false;
+	if (pos >= strlen(s) || pos < 0)
+		return false;
+	for (int i = pos; s[i]; i++)
+		s[i] = s[i + 1];
+	//cout << "popLog: poped at " << pos << " : " << s << ".\n";
+	return true;
+}
 
-	//read string
-	char inputLine[1001];
-	cin.getline(inputLine, 1000);
+void getAllInterpretations(const int atomCnt, char s[])
+{ //generate all interpretations for n atoms
+	int n = 1;
+	for (int i = 0; i < atomCnt; i++)
+		n *= 2;
 
-	//add first node
-	node[0].construct(0, -1, -1, -1);
-	cout << "Node 0 constructed.\n";
-
-	int i = 0;
-	while(inputLine[i] != 0)
+	for (int i = 0; i < n; i++)
 	{
-		while (inputLine[i] == ' ') i++; //ignore spaces
-
-		if (inputLine[i] == '(')
-		{ //add new node, connect it to previous node
-			node[pos].leaf[0] = pos + 1;
-			pos++;
-			node[pos].construct(0, pos - 1, -1, -1);
-			cout << i << ": '('   New node (" << pos << ") constructed, position set to " << pos << ".\n";
-		}
-		else if (inputLine[i] == ')')
-		{ //move back one node
-			if (node[pos].symbol == 0)
-			{
-				cout << i << ": ')'   Error: A proposition was expected.\n";
-				error = true;
-				break;
-			}
-			else
-			{
-				pos = node[pos].father;
-				cout << i << ": ')'   Position set to " << pos << ".\n";
-			}
-		}
-		else if (inputLine[i] == '!')
-		{ //append '!' to past node
-			node[pos].leaf[0] = pos + 1;
-			if (!node[pos - 1].append('!'))
-			{
-				cout << i << ": '!'   Error: Node already appended.\n";
-				error = true;
-				break;
-			}
-			else
-			{
-				cout << i << ": '!'   Symbol appended to node (" << pos - 1 << ").\n";
-			}
-		}
-		else if (inputLine[i] == 'v' || inputLine[i] == '^' || inputLine[i] == '>' || inputLine[i] == '=')
-		{ //create a new leaf on the current node and move to it
-			if (node[pos].leaf[0] == -1)
-			{
-				cout << i << ": '" << inputLine[i] << "'   Error: A proposition was expected.\n";
-				error = true;
-				break;
-			}
-			else
-			{
-				int auxPos = getFreeNode(node, 100);
-				if (!node[pos].append(inputLine[i]))
-				{
-					cout << i << ": '" << inputLine[i] << "'   Error: Node already appended.\n";
-					error = true;
-					break;
-				}
-				else
-				{
-					node[pos].leaf[1] = auxPos;
-					node[auxPos].construct(0, pos, -1, -1);
-					pos = auxPos;
-					cout << i << ": '" << inputLine[i] << "'   New node (" << pos << ") constructed, position set to " << pos << ".\n";
-				}
-			}
-		}
-		else if (inputLine[i] >= 'A' && inputLine[i] <= 'Z')
-		{ //append atomic proposition and move to previous node
-			if (!node[pos].append(inputLine[i]))
-			{
-				cout << i << ": '" << inputLine[i] << "'   Error: Node already appended.\n";
-				error = true;
-				break;
-			}
-			else
-			{
-				//save the nodes containing atoms for interpretation
-				int k = 0; while (k < 100 && atoms[inputLine[i] - 'A'][k] != -1) k++;
-				atoms[inputLine[i] - 'A'][k] = pos;
-
-				pos = node[pos].father;
-				cout << i << ": '" << inputLine[i] << "'   Position set to " << pos << ".\n";
-			}
-		}
-		else if (inputLine[i] == '|') break;
-		else
+		insertChar(s, '{', strlen(s));
+		int b = i, a = 0, ai = 25;
+		while (a < atomCnt)
 		{
-			cout << i << ": '" << inputLine[i] << "'   Error: Unknown syntax.\n";
-			error = true;
-			break;
+			if (b % 2 == 0)
+				insertChar(s, '!', strlen(s));
+
+			//find next atom
+			while (atoms[ai][0] == -1) ai--;
+
+			insertChar(s, ai + 'A', strlen(s));
+			b /= 2;
+			ai--;
+			a++;
 		}
-		i++;
+		insertChar(s, '}', strlen(s));
+	}
+}
+
+void getStrongExp(char s[])
+{ //a naive implementation
+	bool isGood = true;
+	int len = strlen(s);
+
+	for (int i = len - 1; i >= 0; i--)
+	{ // negations
+		if (s[i] == '!')
+		{ //find first atom or end of parentheses after
+			int j = i + 1, paranth = 0;
+			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != ')' || paranth != 1))
+			{
+				if (s[j] == '(') paranth++;
+				else if (s[j] == ')') paranth--;
+				j++;
+			}
+			insertChar(s, ')', j + 1);
+			insertChar(s, '(', i);
+			len += 2;
+		}
+	}
+	
+	for (int i = len - 1; i >= 0; i--)
+	{ // ^ and v
+		if (s[i] == 'v' || s[i] == '^')
+		{ //find first atom or end of parentheses
+			int j = i + 1, paranth = 0;
+			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != ')' || paranth != 1))
+			{
+				if (s[j] == '(') paranth++;
+				else if (s[j] == ')') paranth--;
+				j++;
+			}
+			insertChar(s, ')', j + 1);
+
+			j = i - 1; paranth = 0;
+
+			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != '(' || paranth != 1))
+			{
+				if (s[j] == ')') paranth++;
+				else if (s[j] == '(') paranth--;
+				j--;
+			}
+			insertChar(s, '(', j);
+
+			len += 2;
+		}
 	}
 
+	for (int i = len - 1; i >= 0; i--)
+	{ // for >
+		if (s[i] == '>')
+		{ //find first atom or end of parentheses
+			int j = i + 1, paranth = 0;
+			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != ')' || paranth != 1))
+			{
+				if (s[j] == '(') paranth++;
+				else if (s[j] == ')') paranth--;
+				j++;
+			}
+			insertChar(s, ')', j + 1);
 
-	//evaluation output
-	if (pos != -1 || error)
-		cout << "Error: Proposition is ill-defined.\n";
-	else
-	{
-		cout << "Proposition is well formed.\n";
-		for (int i = 0; i < 100; i++)
-			if (node[i].symbol != 0)
-				cout << i << ' ' << node[i].symbol << "   leafs: " << node[i].leaf[0] << ',' << node[i].leaf[1] << '\n';
+			j = i - 1; paranth = 0;
+
+			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != '(' || paranth != 1))
+			{
+				if (s[j] == ')') paranth++;
+				else if (s[j] == '(') paranth--;
+				j--;
+			}
+			insertChar(s, '(', j);
+
+			len += 2;
+		}
 	}
 
-	//interpretations
-	if (inputLine[i] != 0)
-		cout << "Logic evaluation based on given interpretations:\n";
-	else
-		cout << "No interpretations were given.\n";
-	while (inputLine[i] != 0)// read interpretations
-	{
-		while (inputLine[i] == ' ') i++; //ignore spaces
+	for (int i = len - 1; i >= 0; i--)
+	{ // for =
+		if (s[i] == '=')
+		{ //find first atom or end of parentheses
+			int j = i + 1, paranth = 0;
+			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != ')' || paranth != 1))
+			{
+				if (s[j] == '(') paranth++;
+				else if (s[j] == ')') paranth--;
+				j++;
+			}
+			insertChar(s, ')', j + 1);
 
-		if (inputLine[i] == '{')
+			j = i - 1; paranth = 0;
+
+			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != '(' || paranth != 1))
+			{
+				if (s[j] == ')') paranth++;
+				else if (s[j] == '(') paranth--;
+				j--;
+			}
+			insertChar(s, '(', j);
+
+			len += 2;
+		}
+	}
+
+	//remove excess parentheses
+	for (int i = 0; s[i + 1]; i++)
+	{
+		if (s[i] == '(' && s[i + 1] == '(')
+		{ //find the pair of s[i + 1]
+			int j = i + 2, paranth = 1;
+			while (s[j] && paranth != 0)
+			{
+				if (s[j] == '(') paranth++;
+				else if (s[j] == ')') paranth--;
+				j++;
+			}
+			if (s[j] == ')')
+			{
+				popChar(s, j - 1);
+				popChar(s, i + 1);
+				i--;
+			}
+		}
+	}
+}
+
+void loadIntToTable(int i, int pos, int &tablePos)
+{ //doesnt load atoms
+	if (node[pos].symbol == '!')
+	{
+		table[tablePos--].values[i] = node[pos].value;
+
+		loadIntToTable(i, node[pos].leaf[0], tablePos);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	{
+		table[tablePos--].values[i] = node[pos].value;
+
+		loadIntToTable(i, node[pos].leaf[0], tablePos);
+		loadIntToTable(i, node[pos].leaf[1], tablePos);
+	}
+}
+
+int readInterpretation(char s[])
+{
+	int i = 0, ind = 0;
+	while (s[i] != 0)// read interpretations
+	{
+		while (s[i] == ' ') i++; //ignore spaces
+
+		if (s[i] == '{')
 		{
 			bool b = true;
-			while (inputLine[i] && inputLine[i] != '}') //reading an interpretation
+			while (s[i] && s[i] != '}') //reading an interpretation
 			{
 				i++;
-				if (inputLine[i] == '!')
+				if (s[i] == '!')
 					b = false;
-				else if (inputLine[i] >= 'A' && inputLine[i] <= 'Z')
+				else if (s[i] >= 'A' && s[i] <= 'Z')
 				{
-					if (atoms[inputLine[i] - 'A'][0] != -1)
+					if (atoms[s[i] - 'A'][0] != -1)
 					{
 						int k = 0;
-						while (k < 100 && atoms[inputLine[i] - 'A'][k] != -1)
+						while (k < 100 && atoms[s[i] - 'A'][k] != -1)
 						{
-							node[atoms[inputLine[i] - 'A'][k]].addInterpret(b);
+							node[atoms[s[i] - 'A'][k]].addInterpret(b);
 							k++;
 						}
 						b = true;
 					}
 					else
-						cout << "Error: '" << inputLine[i] << "' is not an atom in the given proposition.\n";
+						cout << "Error: '" << s[i] << "' is not an atom in the given proposition.\n";
 				}
 			}
 			bool ok = true;
@@ -292,14 +444,448 @@ int main()
 					break;
 				}
 			if (ok)
-			{
-				cout<<"Truth value: "<< recInt(0)<<".\n";
+			{ // interpretation output
+				cout << "Truth value: " << recInt(0) << ".\n";
+				//load subtree values
+				int aux = getFreeNode(1001) - 1;
+				loadIntToTable(ind, 0, aux);
+				//load atom value
+				aux = 0;
+				for (int i = 0; i < 26; i++)
+					if (atoms[i][0] != -1)
+						table[aux++].values[ind] = node[atoms[i][0]].value;
+				ind++;
 			}
 			else
 				cout << "Error: Some atoms lack interpretation.\n";
 		}
 		i++;
 	}
+	return ind;
+}
+
+bool getTree(char s[])
+{
+	node[0].construct(0, -1, -1, -1);
+	cout << "Node 0 constructed.\n";
+
+	int pos = 0, i = 0;
+	bool error = false;
+	while (s[i] != 0)
+	{
+		//while (s[i] == ' ') i++; //ignore spaces
+
+		if (s[i] == '(')
+		{ //add new node, connect it to previous node
+			node[pos].leaf[0] = pos + 1;
+			pos++;
+			node[pos].construct(0, pos - 1, -1, -1);
+			cout << i << ": '('      New node (" << pos << ") constructed, position set to " << pos << ".\n";
+		}
+		else if (s[i] == ')')
+		{ //move back one node
+			if (node[pos].symbol == 0)
+			{
+				cout << i << ": ')'      Error: A proposition was expected.\n";
+				error = true;
+				break;
+			}
+			else
+			{
+				pos = node[pos].father;
+				cout << i << ": ')'      Position set to " << pos << ".\n";
+			}
+		}
+		else if (s[i] == '!')
+		{ //append '!' to past node
+			node[pos].leaf[0] = pos + 1;
+			if (!node[pos - 1].append('!'))
+			{
+				cout << i << ": '!'      Error: Node already appended.\n";
+				error = true;
+				break;
+			}
+			else
+			{
+				cout << i << ": '!'      Symbol appended to node (" << pos - 1 << ").\n";
+			}
+		}
+		else if (s[i] == 'v' || s[i] == '^' || s[i] == '>' || s[i] == '=')
+		{ //create a new leaf on the current node and move to it
+			if (node[pos].leaf[0] == -1)
+			{
+				cout << i << ": '" << s[i] << "'      Error: A proposition was expected.\n";
+				error = true;
+				break;
+			}
+			else
+			{
+				int auxPos = getFreeNode(1000);
+				if (!node[pos].append(s[i]))
+				{
+					cout << i << ": '" << s[i] << "'      Error: Node already appended.\n";
+					error = true;
+					break;
+				}
+				else
+				{
+					node[pos].leaf[1] = auxPos;
+					node[auxPos].construct(0, pos, -1, -1);
+					pos = auxPos;
+					cout << i << ": '" << s[i] << "'      New node (" << pos << ") constructed, position set to " << pos << ".\n";
+				}
+			}
+		}
+		else if (s[i] >= 'A' && s[i] <= 'Z')
+		{ //append atomic proposition and move to previous node
+			if (!node[pos].append(s[i]))
+			{
+				cout << i << ": '" << s[i] << "'      Error: Node already appended.\n";
+				error = true;
+				break;
+			}
+			else
+			{
+				//save the nodes containing atoms for interpretation
+				int k = 0; while (k < 1000 && atoms[s[i] - 'A'][k] != -1) k++;
+				atoms[s[i] - 'A'][k] = pos;
+
+				node[pos].leaf[0] = -1; node[pos].leaf[1] = -1; //why is this needed? sometimes atoms get leafs out of nowhere...memory leaks maybe??
+				pos = node[pos].father;
+				cout << i << ": '" << s[i] << "'      Position set to " << pos <<" leaf1: "<< node[pos].leaf[0] << " leaf2: " << node[pos].leaf[1] << ".\n";
+			}
+		}
+		else if (s[i] == 'f')
+		{ //append FALSE and move to previous node
+			if (!node[pos].append(s[i]))
+			{
+				cout << i << ": '" << s[i] << "'      Error: Node already appended.\n";
+				error = true;
+				break;
+			}
+			else
+			{
+				node[pos].value = false; node[pos].isInterpreted = true;
+				node[pos].leaf[0] = -1; node[pos].leaf[1] = -1; //why is this needed? sometimes atoms get leafs out of nowhere...memory leaks maybe??
+				pos = node[pos].father;
+				cout << i << ": 'FALSE'  Position set to " << pos << ".\n";
+			}
+		}
+		else if (s[i] == 't')
+		{ //append FALSE and move to previous node
+			if (!node[pos].append(s[i]))
+			{
+				cout << i << ": '" << s[i] << "'      Error: Node already appended.\n";
+				error = true;
+				break;
+			}
+			else
+			{
+				node[pos].value = true; node[pos].isInterpreted = true;
+				pos = node[pos].father;
+				cout << i << ": 'TRUE'   Position set to " << pos << ".\n";
+			}
+		}
+		else if (s[i] == '|') break;
+		else if(s[i] != ' ')
+		{
+			cout << i << ": '" << s[i] << "'      Error: Unknown syntax.\n";
+			error = true;
+			break;
+		}
+		i++;
+	}
+
+
+	//evaluation output
+	if (pos != -1 || error)
+	{
+		cout << "Error: Proposition is ill-defined.\n";
+		return 0;
+	}
+
+	cout << "Proposition is well formed.\n";
+	for (int i = 0; i < 100; i++)
+		if (node[i].symbol != 0)
+			cout << i << ' ' << node[i].symbol << "   leafs: " << node[i].leaf[0] << ',' << node[i].leaf[1] << '\n';
+	return 1;
+}
+
+void recTableExp(int pos, int ins, char s[])
+{ // truns a tree or subtree back into a strong expression
+	if (node[pos].symbol == '!')
+	{
+		insertChar(s, '!', ins);
+		insertChar(s, ')', ins + 1);
+		insertChar(s, '(', ins);
+		recTableExp(node[pos].leaf[0], ins + 2, s);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	{
+		insertChar(s, node[pos].symbol, ins);
+		insertChar(s, ')', ins + 1);
+		insertChar(s, '(', ins);
+
+		recTableExp(node[pos].leaf[1], ins + 2, s);
+		recTableExp(node[pos].leaf[0], ins + 1, s);
+	}
+	else if (node[pos].symbol >= 'A' && node[pos].symbol <= 'Z' || node[pos].symbol == 'f' || node[pos].symbol == 't')
+		insertChar(s, node[pos].symbol, ins);
+}
+
+void getTableHeader(int pos, int &tablePos)
+{ //fills the table header, doesnt add atoms
+	if (node[pos].symbol == '!')
+	{
+		table[tablePos].exp[0] = 0;
+		recTableExp(pos, 0, table[tablePos--].exp);
+
+		getTableHeader(node[pos].leaf[0], tablePos);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	{
+		table[tablePos].exp[0] = 0;
+		recTableExp(pos, 0, table[tablePos--].exp);
+
+		getTableHeader(node[pos].leaf[0], tablePos);
+		getTableHeader(node[pos].leaf[1], tablePos);
+	}
+}
+
+int buildTable()
+{ //builds a table by getting the header (axcepting atoms) then adding atoms from atom list and removing spaces(if an atom si used twice a space is wrongfully created)
+	int treeLen = getFreeNode(1001) - 1, l = 0;
+	getTableHeader(0, treeLen);
+
+	for (int i = 0; i < 26; i++)
+		if (atoms[i][0] != -1)
+			table[l++].exp[0] = i + 'A';
+
+	treeLen = getFreeNode(1001);
+	int tableLen = treeLen;
+	for (int i = 0; i < treeLen; i++)
+		if (table[i].exp[0] == 0)
+		{
+			for (int j = i; j + 1 < treeLen; j++)
+				table[j] = table[j + 1];
+			i--;
+			tableLen--;
+		}
+	return tableLen;
+}
+
+void printTable(int tableLen, int interpretationCnt)
+{ //tedious low level formating...
+	//header
+	cout << 'É';
+	for (int i = 0; i < tableLen - 1; i++)
+	{
+		for (int j = 0; table[i].exp[j]; j++)
+			cout << 'Í';
+		cout << 'Ñ';
+	}
+	for (int j = 0; table[tableLen - 1].exp[j]; j++)
+		cout << 'Í';
+	cout << "»\nº";
+	for (int i = 0; i < tableLen - 1; i++)
+		cout << table[i].exp << '³';
+	cout << table[tableLen - 1].exp << "º\nÌ";
+	for (int i = 0; i < tableLen - 1; i++)
+	{
+		for (int j = 0; table[i].exp[j]; j++)
+			cout << 'Í';
+		cout << 'Ø';
+	}
+	for (int j = 0; table[tableLen - 1].exp[j]; j++)
+		cout << 'Í';
+	cout << "¹\n";
+
+	for (int i = 0; i < interpretationCnt - 1; i++)
+	{
+		//value line
+		cout << 'º';
+		for (int j = 0; j < tableLen - 1; j++)
+		{
+			for (int k = 0; k < strlen(table[j].exp) - 1; k++)
+				cout << ' ';
+			cout << table[j].values[i] << '³';
+		}
+		for (int k = 0; k < strlen(table[tableLen - 1].exp) - 1; k++)
+			cout << ' ';
+		cout << table[tableLen - 1].values[i] << "º\n";
+		//table line
+		cout << 'Ç';
+		for (int j = 0; j < tableLen - 1; j++)
+		{
+			for (int k = 0; k < strlen(table[j].exp); k++)
+				cout << 'Ä';
+			cout << 'Å';
+		}
+		for (int k = 0; k < strlen(table[tableLen - 1].exp); k++)
+			cout << 'Ä';
+		cout << "¶\n";
+	}
+	//final value line
+	cout << 'º';
+	for (int j = 0; j < tableLen - 1; j++)
+	{
+		for (int k = 0; k < strlen(table[j].exp) - 1; k++)
+			cout << ' ';
+		cout << table[j].values[interpretationCnt - 1] << '³';
+	}
+	for (int k = 0; k < strlen(table[tableLen - 1].exp) - 1; k++)
+		cout << ' ';
+	cout << table[tableLen - 1].values[interpretationCnt - 1] << "º\n";
+	//final table line
+	cout << 'È';
+	for (int j = 0; j < tableLen - 1; j++)
+	{
+		for (int k = 0; k < strlen(table[j].exp); k++)
+			cout << 'Í';
+		cout << 'Ï';
+	}
+	for (int k = 0; k < strlen(table[tableLen - 1].exp); k++)
+		cout << 'Í';
+	cout << "¼\n";
+}
+
+void call(LPCSTR lpApplicationName, char arg[])
+{
+	STARTUPINFOA si;
+	PROCESS_INFORMATION pi;
+
+	SecureZeroMemory(&si, sizeof(si));
+	si.cb = sizeof(si);
+	SecureZeroMemory(&pi, sizeof(pi));
+
+	// call program
+	CreateProcessA(lpApplicationName,arg,NULL,NULL,FALSE,CREATE_NEW_CONSOLE,NULL,NULL,&si,&pi);
+	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
+}
+
+void drawGraphSFML()
+{
+	//graphics
+	char graphStr[1001] = { 0 };
+	int treeLen = getFreeNode(1001);
+	for (int i = 0; i < treeLen; i++)
+	{
+		insertChar(graphStr, node[i].symbol, strlen(graphStr));
+		if (node[i].leaf[0] != -1)
+		{
+			insertChar(graphStr, '[', strlen(graphStr));
+			int n = strlen(graphStr), sl = node[i].leaf[0];
+			while (sl)
+			{
+				insertChar(graphStr, sl % 10 + '0', n);
+				sl /= 10;
+			}
+			insertChar(graphStr, ']', strlen(graphStr));
+		}
+		if (node[i].leaf[1] != -1)
+		{
+			insertChar(graphStr, '[', strlen(graphStr));
+			int n = strlen(graphStr), sl = node[i].leaf[1];
+			while (sl)
+			{
+				insertChar(graphStr, sl % 10 + '0', n);
+				sl /= 10;
+			}
+			insertChar(graphStr, ']', strlen(graphStr));
+		}
+	}
+	cout << graphStr << '\n';
+	call("DrawBinTree.exe", graphStr);
+}
+
+int main()
+{
+	int pos = 0;
+	for (int i = 0; i < 26; i++) for (int j = 0; j < 100; j++) atoms[i][j] = -1;
+	bool error = false;
+
+	//init atom list
+	for (int i = 0; i < 26; i++)
+		for (int j = 0; j < 1000; j++)
+			atoms[i][j] = -1;
+
+	//read string
+	char inputLine[1001] = { 0 }, expression[1001] = { 0 }, interpretation[1001] = { 0 };
+	cin.getline(inputLine, 1000);
+
+	int lineI = 0, intI = 0;
+	while (inputLine[lineI] && inputLine[lineI] != '|')
+	{
+		expression[lineI] = inputLine[lineI];
+		lineI++;
+	}
+	expression[lineI] = 0;
+	lineI++;
+	while (inputLine[lineI])
+	{
+		interpretation[intI++] = inputLine[lineI];
+		lineI++;
+	}
+	interpretation[intI] = 0;
+
+	//relax synthax translator
+	getStrongExp(expression);
+	cout << expression << '\n';
+
+	//build tree
+	getTree(expression);
+
+	//drawTree
+	for (int i = 0; i < 100; i++)
+	{ //create empty char matrix
+		for (int j = 0; j < 99; j++)
+			treeString[i][j] = ' ';
+		treeString[i][99] = 0;
+	}
+	recTreeString(0, 30, 0);
+	for (int i = 0; i < 100; i++)
+	{ //print matrix
+		bool ok = false;
+		for (int j = 0; j < 99; j++)
+			if (treeString[i][j] != ' ')
+			{
+				ok = true;
+				break;
+			}
+		if (!ok)
+			break;
+		cout << treeString[i] << '\n';
+	}
+
+	//graphics
+	drawGraphSFML(); //make sure DrawBinTree.exe is in work dir (run the executable directly, not from the IDE)
+
+	for(int i = 0; interpretation[i]; i++)
+		if (interpretation[i] == '@')
+		{
+			memset(interpretation, 0, 1001);
+			getAllInterpretations(getAtomCount(), interpretation);
+			break;
+		}
+
+	//interpretations
+	int interpretationCnt;
+	if (interpretation[0] != 0)
+	{
+		cout << "Logic evaluation based on given interpretations:"<< interpretation[0] <<"\n";
+		interpretationCnt = readInterpretation(interpretation);
+
+		int tableLen = buildTable();
+
+		for (int i = 0; i < tableLen; i++)
+			cout << table[i].exp << '\n';
+
+		//draw table
+		printTable(tableLen, interpretationCnt);
+	}
+	else
+		cout << "No interpretations were given.\n";
 
 	//pause
 	getchar();
