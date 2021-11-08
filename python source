@@ -243,4 +243,3 @@ if __name__=='__main__':
     #print nodes and leafs    
     for i in range(len(nodes)):
         print(i, nodes[i].symbol, nodes[i].leaf1, nodes[i].leaf2)
-        print("Error!")
