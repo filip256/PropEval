@@ -8,6 +8,7 @@ class Node:
     father = -1
     leaf1 = -1
     leaf2 = -1
+    value = False
     def __init__(self, symb, fath):
         self.symbol = symb
         self.father = fath
@@ -20,9 +21,7 @@ class Node:
             return False
 
 
-if __name__=='__main__':
-    inp = input()
-    
+def relaxedToStrong(inp):
     l = []
     for i in inp:
         l.append(i)
@@ -39,18 +38,21 @@ if __name__=='__main__':
                 paranth = 0
                 if l[j] == '(':
                     paranth = paranth + 1
-                while l[j] != ')' and paranth == 1:
+                j += 1
+                while j < len(l) - 1 and paranth != 0:
                     if l[j] == ')':
                         paranth = paranth - 1
+                    elif l[j] == '(':
+                        paranth = paranth + 1
                     j = j + 1
-                l.insert(j + 1, ')')
+                l.insert(j, ')')
             l.insert(i - 1, '(')
         i = i - 1
     
     # disjunctions
     i = len(l) - 1
     while i > 0:
-        if l[i-1] == 'v':
+        if l[i-1] == 'v' or l[i-1] == '^':
             if l[i] >= 'A' and l[i] <= 'Z' or l[i] == 'f' or l[i] == 't':
                 l.insert(i + 1, ')')
             else:
@@ -58,53 +60,25 @@ if __name__=='__main__':
                 paranth = 0
                 if l[j] == '(':
                     paranth = paranth + 1
-                while l[j] != ')' and paranth == 1:
+                j += 1
+                while j < len(l) - 1 and paranth != 0:
                     if l[j] == ')':
                         paranth = paranth - 1
+                    elif l[j] == '(':
+                        paranth = paranth + 1
                     j = j + 1
-                l.insert(j + 1, ')')
+                l.insert(j, ')')
             if l[i-2] >= 'A' and l[i-2] <= 'Z' or l[i] == 'f' or l[i] == 't':
                 l.insert(i - 2, '(')
             else:
-                j = i - 2
-                paranth = 0
-                if l[j] == ')':
-                    paranth = paranth + 1
-                while l[j] != '(' and paranth == 1:
+                j -= 1
+                while j > 0 and paranth != 0:
                     if l[j] == '(':
                         paranth = paranth - 1
+                    elif l[j] == ')':
+                        paranth = paranth + 1
                     j = j - 1
-                l.insert(j, '(')
-        i = i - 1
-        
-    # conjunction
-    i = len(l) - 1
-    while i > 0:
-        if l[i-1] == '^':
-            if l[i] >= 'A' and l[i] <= 'Z' or l[i] == 'f' or l[i] == 't':
-                l.insert(i + 1, ')')
-            else:
-                j = i
-                paranth = 0
-                if l[j] == '(':
-                    paranth = paranth + 1
-                while l[j] != ')' and paranth == 1:
-                    if l[j] == ')':
-                        paranth = paranth - 1
-                    j = j + 1
-                l.insert(j + 1, ')')
-            if l[i-2] >= 'A' and l[i-2] <= 'Z' or l[i] == 'f' or l[i] == 't':
-                l.insert(i - 2, '(')
-            else:
-                j = i - 2
-                paranth = 0
-                if l[j] == ')':
-                    paranth = paranth + 1
-                while l[j] != '(' and paranth == 1:
-                    if l[j] == '(':
-                        paranth = paranth - 1
-                    j = j - 1
-                l.insert(j, '(')
+                l.insert(j + 1, '(')
         i = i - 1
         
     # implication
@@ -118,11 +92,14 @@ if __name__=='__main__':
                 paranth = 0
                 if l[j] == '(':
                     paranth = paranth + 1
-                while l[j] != ')' and paranth == 1:
+                j += 1
+                while j < len(l) - 1 and paranth != 0:
                     if l[j] == ')':
                         paranth = paranth - 1
+                    elif l[j] == '(':
+                        paranth = paranth + 1
                     j = j + 1
-                l.insert(j + 1, ')')
+                l.insert(j, ')')
             if l[i-2] >= 'A' and l[i-2] <= 'Z' or l[i] == 'f' or l == 't':
                 l.insert(i - 2, '(')
             else:
@@ -130,12 +107,16 @@ if __name__=='__main__':
                 paranth = 0
                 if l[j] == ')':
                     paranth = paranth + 1
-                while l[j] != '(' and paranth == 1:
+                j -= 1
+                while j > 0 and paranth != 0:
                     if l[j] == '(':
                         paranth = paranth - 1
+                    elif l[j] == ')':
+                        paranth = paranth + 1
                     j = j - 1
-                l.insert(j, '(')
+                l.insert(j + 1, '(')
         i = i - 1
+        print(''.join(l))
         
     # equivalance
     i = len(l) - 1
@@ -148,11 +129,14 @@ if __name__=='__main__':
                 paranth = 0
                 if l[j] == '(':
                     paranth = paranth + 1
-                while l[j] != ')' and paranth == 1:
+                j += 1
+                while j < len(l) - 1 and paranth != 0:
                     if l[j] == ')':
                         paranth = paranth - 1
+                    elif l[j] == '(':
+                        paranth = paranth + 1
                     j = j + 1
-                l.insert(j + 1, ')')
+                l.insert(j, ')')
             if l[i-2] >= 'A' and l[i-2] <= 'Z' or l[i] == 'f' or l[i] == 't':
                 l.insert(i - 2, '(')
             else:
@@ -160,11 +144,14 @@ if __name__=='__main__':
                 paranth = 0
                 if l[j] == ')':
                     paranth = paranth + 1
-                while l[j] != '(' and paranth == 1:
+                j -= 1
+                while j > 0 and paranth != 0:
                     if l[j] == '(':
                         paranth = paranth - 1
+                    elif l[j] == ')':
+                        paranth = paranth + 1
                     j = j - 1
-                l.insert(j, '(')
+                l.insert(j + 1, '(')
         i = i - 1
         
     # remove excess ()
@@ -189,14 +176,9 @@ if __name__=='__main__':
     string = '' 
     for i in l:
         string += i
-    print(string)
-    
-    #build tree
-    pos = 0
-    nodes = []
-    nod = Node('', -1)
-    nodes.append(nod)
-    
+    return string
+
+def buildTree(string, pos, nodes, variables):
     ok = True
     for i in range(len(string)):
         if string[i] == '(':
@@ -206,7 +188,17 @@ if __name__=='__main__':
             pos += 1
         elif string[i] == ')':
             pos = nodes[pos].father
-        elif string[i] >= 'A' and  string[i] <= 'Z' or string[i] == 'f' or string[i] == 't':
+
+        elif string[i] >= 'A' and  string[i] <= 'Z':
+            if nodes[pos].addSymbol(string[i]) == False:
+                print("Error!1")
+                ok = False
+                break
+            pos = nodes[pos].father
+            if string[i] not in variables:
+               variables.append(string[i])
+
+        elif string[i] == 'f' or string[i] == 't':
             if nodes[pos].addSymbol(string[i]) == False:
                 print("Error!1")
                 ok = False
@@ -239,7 +231,83 @@ if __name__=='__main__':
         print("Well-formed!")
     else:
         print("Error!")
-        
+
+def evaluate(pos, nodes, valueDict):
+
+    if nodes[pos].symbol == 'f':
+        return False
+
+    elif nodes[pos].symbol == 't':
+        return True
+
+    elif nodes[pos].symbol >= 'A' and nodes[pos].symbol <= 'Z':
+        return valueDict[nodes[pos].symbol]
+
+    elif nodes[pos].symbol == '!':
+        aux = evaluate(nodes[pos].leaf1, nodes, valueDict)
+        return not aux
+
+    elif nodes[pos].symbol == '^':
+        aux1 = evaluate(nodes[pos].leaf1, nodes, valueDict)
+        aux2 = evaluate(nodes[pos].leaf2, nodes, valueDict)
+        return bool(aux1 * aux2)
+
+    elif nodes[pos].symbol == 'v':
+        aux1 = evaluate(nodes[pos].leaf1, nodes, valueDict)
+        aux2 = evaluate(nodes[pos].leaf2, nodes, valueDict)
+        return bool(aux1 + aux2)
+
+    elif nodes[pos].symbol == '>':
+        aux1 = evaluate(nodes[pos].leaf1, nodes, valueDict)
+        aux2 = evaluate(nodes[pos].leaf2, nodes, valueDict)
+        if aux1 == True and aux2 == False:
+            return False
+        return True
+
+    elif nodes[pos].symbol == '=':
+        aux1 = evaluate(nodes[pos].leaf1, nodes, valueDict)
+        aux2 = evaluate(nodes[pos].leaf2, nodes, valueDict)
+        if aux1 != aux2:
+            return False
+        return True
+    
+      
+
+  
+if __name__=='__main__':
+    inp = input()
+    
+    string = relaxedToStrong(inp)
+
+    print(string)
+    
+    #build tree
+    pos = 0
+    nodes = []
+    nod = Node('', -1)
+    nodes.append(nod)
+    variables = []
+    buildTree(string, pos, nodes, variables)
+
     #print nodes and leafs    
     for i in range(len(nodes)):
         print(i, nodes[i].symbol, nodes[i].leaf1, nodes[i].leaf2)
+
+    print(variables)
+
+    inter = input()
+
+    valueDict = {}
+    ok = True
+    for i in range(len(inter)):
+        if inter[i] == '!':
+            ok = False
+        if inter[i] >= 'A' and  inter[i] <= 'Z':
+            if inter[i] in variables:
+                valueDict[inter[i]] = ok
+            ok = True
+
+    print(evaluate(0, nodes, valueDict))
+
+    #{P!QS!T}
+
