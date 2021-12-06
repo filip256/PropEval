@@ -1,5 +1,4 @@
 // Logic proposition evaluator.
-// Spaces are now ignored.
 
 // Symbols:
 // - atomic proposition: A-Z
@@ -24,6 +23,8 @@
 // DrawBinTree.exe and it's source can be found here:
 // Make sure DrawBinTree.exe is in the working dir of the main program.
 
+// evaluates proposition in order to find if it is well formed using the graph based algorithm
+// sorry it's not in python, I don't know enough of it yet but I'll come back when I do
 #include <iostream>
 #include <Windows.h>
 #include <string.h>
@@ -72,10 +73,32 @@ struct TableColumn
 	bool values[256];
 };
 
-Node node[100];
+struct TransformRule
+{
+	Node from[100], to[100]; 
+};
+
+Node node[1000];
 TableColumn table[1001];
+TransformRule simplifications[10];
+
+
 int atoms[26][1000];
 char treeString[100][100];
+bool verbose = true;
+
+void clearTree(const int size)
+{
+	for (int i = 0; i < size; i++)
+		node[i].deconstruct();
+}
+
+void clearAtomsList()
+{
+	for (int i = 0; i < 26; i++)
+		for (int j = 0; j < 1000; j++)
+			atoms[i][j] = -1;
+}
 
 int getFreeNode(const int size)
 { //return first unused node from the list
@@ -119,6 +142,20 @@ bool recInt(int pos)
 		node[pos].value = ls + rs;
 		return ls + rs;
 	}
+	else if (node[pos].symbol == '|')
+	{
+		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
+		//cout << pos << " " << node[pos].symbol << " is " << ls * rs << ".\n";
+		node[pos].value = !(ls * rs);
+		return !(ls * rs);
+	}
+	else if (node[pos].symbol == '*')
+	{
+		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
+		//cout << pos << " " << node[pos].symbol << " is " << bool(ls + rs) << ".\n";
+		node[pos].value = !(ls + rs);
+		return !(ls + rs);
+	}
 	else if (node[pos].symbol == '>')
 	{
 		bool ls = recInt(node[pos].leaf[0]), rs = recInt(node[pos].leaf[1]);
@@ -159,10 +196,10 @@ bool recInt(int pos)
 	else
 	{
 		//cout << pos << " " << node[pos].symbol << " is ";
-		if (!node[pos].value)
-			cout << "0 (contradiction).\n";
-		else
-			cout << "1 (tautology).\n";
+		//if (!node[pos].value)
+		//	cout << "0 (contradiction).\n";
+		//else
+		//	cout << "1 (tautology).\n";
 		return node[pos].value;
 	}
 }
@@ -174,7 +211,7 @@ void getTreeDepth(int pos, int currentD, int &maxD)
 
 	if (node[pos].symbol == '!')
 		getTreeDepth(node[pos].leaf[0], currentD + 1, maxD);
-	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '|' || node[pos].symbol == '*')
 	{
 		getTreeDepth(node[pos].leaf[0], currentD + 1, maxD);
 		getTreeDepth(node[pos].leaf[1], currentD + 1, maxD);
@@ -194,7 +231,7 @@ void recTreeString(int pos, int x, int y)
 			treeString[y + i + 1][x - i - 1] = '/';
 		recTreeString(node[pos].leaf[0], x - depth - 1, y + depth + 1);
 	}
-	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '|' || node[pos].symbol == '*')
 	{
 		treeString[y][x] = node[pos].symbol;
 
@@ -217,12 +254,12 @@ void recTreeString(int pos, int x, int y)
 
 bool insertChar(char s[], const char c, const int pos)
 {
+	//cout << "insLog: inserted " << c << " at " << pos <<" : "<<s<<".\n";
 	if (pos > strlen(s) + 1 || pos < 0)
 		return false;
 	for (int i = strlen(s); i >= pos; i--)
 		s[i + 1] = s[i];
 	s[pos] = c;
-	//cout << "insLog: inserted " << c << " at " << pos <<" : "<<s<<".\n";
 	return true;
 }
 
@@ -287,7 +324,7 @@ void getStrongExp(char s[])
 	
 	for (int i = len - 1; i >= 0; i--)
 	{ // ^ and v
-		if (s[i] == 'v' || s[i] == '^')
+		if (s[i] == 'v' || s[i] == '^' || s[i] == '|' || s[i] == '*')
 		{ //find first atom or end of parentheses
 			int j = i + 1, paranth = 0;
 			while (s[j] && (((s[j] < 'A' || s[j] > 'Z') && (s[j] != 'f' && s[j] != 't')) || paranth != 0) && (s[j] != ')' || paranth != 1))
@@ -396,7 +433,7 @@ void loadIntToTable(int i, int pos, int &tablePos)
 
 		loadIntToTable(i, node[pos].leaf[0], tablePos);
 	}
-	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '|' || node[pos].symbol == '*')
 	{
 		table[tablePos--].values[i] = node[pos].value;
 
@@ -510,7 +547,7 @@ bool getTree(char s[])
 				cout << i << ": '!'      Symbol appended to node (" << pos - 1 << ").\n";
 			}
 		}
-		else if (s[i] == 'v' || s[i] == '^' || s[i] == '>' || s[i] == '=')
+		else if (s[i] == 'v' || s[i] == '^' || s[i] == '>' || s[i] == '=' || s[i] == '|' || s[i] == '*')
 		{ //create a new leaf on the current node and move to it
 			if (node[pos].leaf[0] == -1)
 			{
@@ -586,7 +623,7 @@ bool getTree(char s[])
 				cout << i << ": 'TRUE'   Position set to " << pos << ".\n";
 			}
 		}
-		else if (s[i] == '|') break;
+		else if (s[i] == '#') break;
 		else if(s[i] != ' ')
 		{
 			cout << i << ": '" << s[i] << "'      Error: Unknown syntax.\n";
@@ -607,7 +644,7 @@ bool getTree(char s[])
 	cout << "Proposition is well formed.\n";
 	for (int i = 0; i < 100; i++)
 		if (node[i].symbol != 0)
-			cout << i << ' ' << node[i].symbol << "   leafs: " << node[i].leaf[0] << ',' << node[i].leaf[1] << '\n';
+			cout << i << ' ' << node[i].symbol << "   leafs: " << node[i].leaf[0] << ',' << node[i].leaf[1] <<"   father:   "<< node[i].father<< '\n';
 	return 1;
 }
 
@@ -620,7 +657,7 @@ void recTableExp(int pos, int ins, char s[])
 		insertChar(s, '(', ins);
 		recTableExp(node[pos].leaf[0], ins + 2, s);
 	}
-	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '|' || node[pos].symbol == '*')
 	{
 		insertChar(s, node[pos].symbol, ins);
 		insertChar(s, ')', ins + 1);
@@ -642,7 +679,7 @@ void getTableHeader(int pos, int &tablePos)
 
 		getTableHeader(node[pos].leaf[0], tablePos);
 	}
-	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=')
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '|' || node[pos].symbol == '*')
 	{
 		table[tablePos].exp[0] = 0;
 		recTableExp(pos, 0, table[tablePos--].exp);
@@ -767,55 +804,2031 @@ void call(LPCSTR lpApplicationName, char arg[])
 void drawGraphSFML()
 {
 	//graphics
-	char graphStr[1001] = { 0 };
-	int treeLen = getFreeNode(1001);
-	for (int i = 0; i < treeLen; i++)
+	char graphStr[10001] = { 0 };
+	//int treeLen = getFreeNode(1001);
+	for (int i = 0; i < 1000; i++)
 	{
-		insertChar(graphStr, node[i].symbol, strlen(graphStr));
-		if (node[i].leaf[0] != -1)
+		if (node[i].symbol)
 		{
-			insertChar(graphStr, '[', strlen(graphStr));
-			int n = strlen(graphStr), sl = node[i].leaf[0];
-			while (sl)
+			insertChar(graphStr, node[i].symbol, strlen(graphStr));
+			if (node[i].leaf[0] != -1)
 			{
-				insertChar(graphStr, sl % 10 + '0', n);
-				sl /= 10;
+				insertChar(graphStr, '[', strlen(graphStr));
+				int n = strlen(graphStr), sl = node[i].leaf[0];
+				while (sl)
+				{
+					insertChar(graphStr, sl % 10 + '0', n);
+					sl /= 10;
+				}
+				insertChar(graphStr, ']', strlen(graphStr));
 			}
-			insertChar(graphStr, ']', strlen(graphStr));
-		}
-		if (node[i].leaf[1] != -1)
-		{
-			insertChar(graphStr, '[', strlen(graphStr));
-			int n = strlen(graphStr), sl = node[i].leaf[1];
-			while (sl)
+			if (node[i].leaf[1] != -1)
 			{
-				insertChar(graphStr, sl % 10 + '0', n);
-				sl /= 10;
+				insertChar(graphStr, '[', strlen(graphStr));
+				int n = strlen(graphStr), sl = node[i].leaf[1];
+				while (sl)
+				{
+					insertChar(graphStr, sl % 10 + '0', n);
+					sl /= 10;
+				}
+				insertChar(graphStr, ']', strlen(graphStr));
 			}
-			insertChar(graphStr, ']', strlen(graphStr));
 		}
 	}
 	cout << graphStr << '\n';
 	call("DrawBinTree.exe", graphStr);
 }
 
+
+bool compareTreesDIFF(int posTree1, int posTree2, Node tree2[])
+{
+	cout << node[posTree1].symbol << ' ' << tree2[posTree2].symbol << '\n';
+	if (tree2[posTree2].symbol >= 'A' && tree2[posTree2].symbol <= 'Z')
+		return true;
+	else if (node[posTree1].symbol == '!' && tree2[posTree2].symbol == '!')
+		return true * compareTreesDIFF(node[posTree1].leaf[0], tree2[posTree2].leaf[0], tree2);
+	else if ((node[posTree1].symbol == '^' && tree2[posTree2].symbol == '^') || (node[posTree1].symbol == 'v' && tree2[posTree2].symbol == 'v') || (node[posTree1].symbol == '>' && tree2[posTree2].symbol == '>') || (node[posTree1].symbol == '=' && tree2[posTree2].symbol == '=') || (node[posTree1].symbol == '*' && tree2[posTree2].symbol == '*') || (node[posTree1].symbol == '|' && tree2[posTree2].symbol == '|'))
+		return true * compareTreesDIFF(node[posTree1].leaf[0], tree2[posTree2].leaf[0], tree2) * compareTreesDIFF(node[posTree1].leaf[1], tree2[posTree2].leaf[1], tree2);
+	return false;
+}
+
+bool compareTrees(int posTree1, int posTree2)
+{
+	cout << node[posTree1].symbol << ' ' << node[posTree2].symbol << '\n';
+	if (node[posTree1].symbol == node[posTree2].symbol)
+	{
+		if (node[posTree1].symbol == '!')
+			return true * compareTrees(node[posTree1].leaf[0], node[posTree2].leaf[0]);
+		else if (node[posTree1].symbol == '^' || node[posTree1].symbol == 'v' || node[posTree1].symbol == '>' || node[posTree1].symbol == '=' || node[posTree1].symbol == '*' || node[posTree1].symbol == '|')
+			return true * (compareTrees(node[posTree1].leaf[0], node[posTree2].leaf[0]) * compareTrees(node[posTree1].leaf[1], node[posTree2].leaf[1]) + compareTrees(node[posTree1].leaf[0], node[posTree2].leaf[1]) * compareTrees(node[posTree1].leaf[1], node[posTree2].leaf[0]));
+		return true;
+	}
+	return false;
+}
+
+void addTree(int pos, Node tree2[])
+{
+	int free = getFreeNode(1000);
+	if(free != -1)
+		node[free].construct(tree2[pos].symbol, tree2[pos].father, tree2[pos].leaf[0], tree2[pos].leaf[1]);
+
+	if (tree2[pos].symbol == '!')
+		addTree(tree2[pos].leaf[0], tree2);
+	else if (tree2[pos].symbol == '^' || tree2[pos].symbol == 'v' || tree2[pos].symbol == '>' || tree2[pos].symbol == '=' || tree2[pos].symbol == '*' || tree2[pos].symbol == '|')
+	{
+		addTree(tree2[pos].leaf[0], tree2);
+		addTree(tree2[pos].leaf[1], tree2);
+	}
+}
+
+void updateAtomsList(int pos)
+{
+	if (node[pos].symbol >= 'A' && node[pos].symbol <= 'Z')
+	{
+		for (int i = 0; i < 1000; i++)
+			if (atoms[node[pos].symbol - 65][i] == -1)
+			{
+				atoms[node[pos].symbol - 65][i] = pos;
+				break;
+			}
+	}
+	else if (node[pos].symbol == '!')
+	{
+		updateAtomsList(node[pos].leaf[0]);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		updateAtomsList(node[pos].leaf[0]);
+		updateAtomsList(node[pos].leaf[1]);
+	}
+}
+
+
+//Simplifacation and normal forms
+void defragmentTree(int pos)
+{
+	int free;
+	if (node[0].symbol == 0)
+		free = 0;
+	else
+		free = getFreeNode(1000);
+	if (pos > free)
+	{
+		if (pos == node[node[pos].father].leaf[1])
+			node[node[pos].father].leaf[1] = free;
+		else
+			node[node[pos].father].leaf[0] = free;
+
+		node[free].construct(node[pos].symbol, node[pos].father, node[pos].leaf[0], node[pos].leaf[1]);
+
+		node[node[pos].leaf[0]].father = free;
+		node[node[pos].leaf[1]].father = free;
+
+		node[pos].deconstruct();
+		pos = free;
+	}
+
+	//parsing
+	if (node[pos].symbol == '!')
+	{
+		defragmentTree(node[pos].leaf[0]);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		defragmentTree(node[pos].leaf[0]);
+		defragmentTree(node[pos].leaf[1]);
+	}
+}
+
+void copyTree(int pos, int &newPos)
+{
+	int free = getFreeNode(1000);
+	if(newPos == -1) //only do this first time
+		newPos = free;
+	if (free != -1)
+		node[free].construct(node[pos].symbol, node[pos].father, node[pos].leaf[0], node[pos].leaf[1]);
+
+	if (node[pos].symbol == '!')
+		copyTree(node[pos].leaf[0], newPos);
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		copyTree(node[pos].leaf[0], newPos);
+		copyTree(node[pos].leaf[1], newPos);
+	}
+}
+
+void deleteTree(int pos)
+{
+	if (node[pos].symbol == '!')
+		deleteTree(node[pos].leaf[0]);
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '|' || node[pos].symbol == '*')
+	{
+		deleteTree(node[pos].leaf[0]);
+		deleteTree(node[pos].leaf[1]);
+	}
+	node[pos].deconstruct();
+}
+
+bool compareValues(int posTree1, int posTree2)
+{
+	char s[10001] = {0};
+	getAllInterpretations(getAtomCount(), s);
+
+	bool isEqual = true;
+	int i = 0;
+	while (s[i] != 0)// read interpretations
+	{
+		while (s[i] == ' ') i++; //ignore spaces
+
+		if (s[i] == '{')
+		{
+			bool b = true;
+			while (s[i] && s[i] != '}') //reading an interpretation
+			{
+				i++;
+				if (s[i] == '!')
+					b = false;
+				else if (s[i] >= 'A' && s[i] <= 'Z')
+				{
+					if (atoms[s[i] - 'A'][0] != -1)
+					{
+						int k = 0;
+						while (k < 100 && atoms[s[i] - 'A'][k] != -1)
+						{
+							node[atoms[s[i] - 'A'][k]].addInterpret(b);
+							k++;
+						}
+						b = true;
+					}
+					else
+						cout << "Error: '" << s[i] << "' is not an atom in the given proposition.\n";
+				}
+			}
+			if (recInt(posTree1) != recInt(posTree2))
+			{
+				isEqual = false;
+				break;
+			}
+		}
+		i++;
+	}
+	return isEqual;
+}
+
+bool reverseCompareValues(int posTree1, int posTree2)
+{
+	char s[10001] = { 0 };
+	getAllInterpretations(getAtomCount(), s);
+
+	bool isEqual = true;
+	int i = 0;
+	while (s[i] != 0)// read interpretations
+	{
+		while (s[i] == ' ') i++; //ignore spaces
+
+		if (s[i] == '{')
+		{
+			bool b = true;
+			while (s[i] && s[i] != '}') //reading an interpretation
+			{
+				i++;
+				if (s[i] == '!')
+					b = false;
+				else if (s[i] >= 'A' && s[i] <= 'Z')
+				{
+					if (atoms[s[i] - 'A'][0] != -1)
+					{
+						int k = 0;
+						while (k < 100 && atoms[s[i] - 'A'][k] != -1)
+						{
+							node[atoms[s[i] - 'A'][k]].addInterpret(b);
+							k++;
+						}
+						b = true;
+					}
+					else
+						cout << "Error: '" << s[i] << "' is not an atom in the given proposition.\n";
+				}
+			}
+			if (recInt(posTree1) == recInt(posTree2))
+			{
+				isEqual = false;
+				break;
+			}
+		}
+		i++;
+	}
+	return isEqual;
+}
+
+bool isTautology(int posTree1)
+{
+	char s[10001] = { 0 };
+	
+	getAllInterpretations(getAtomCount(), s);
+
+	bool isEqual = true;
+	int i = 0;
+	while (s[i] != 0)// read interpretations
+	{
+		while (s[i] == ' ') i++; //ignore spaces
+
+		if (s[i] == '{')
+		{
+			bool b = true;
+			while (s[i] && s[i] != '}') //reading an interpretation
+			{
+				i++;
+				if (s[i] == '!')
+					b = false;
+				else if (s[i] >= 'A' && s[i] <= 'Z')
+				{
+					if (atoms[s[i] - 'A'][0] != -1)
+					{
+						int k = 0;
+						while (k < 100 && atoms[s[i] - 'A'][k] != -1)
+						{
+							node[atoms[s[i] - 'A'][k]].addInterpret(b);
+							k++;
+						}
+						b = true;
+					}
+					else
+						cout << "Error: '" << s[i] << "' is not an atom in the given proposition.\n";
+				}
+			}
+			if (recInt(posTree1) == 0)
+			{
+				isEqual = false;
+				break;
+			}
+		}
+		i++;
+	}
+	return isEqual;
+}
+
+bool isContradiction(int posTree1)
+{
+	char s[10001] = { 0 };
+	getAllInterpretations(getAtomCount(), s);
+
+	bool isEqual = true;
+	int i = 0;
+	while (s[i] != 0)// read interpretations
+	{
+		while (s[i] == ' ') i++; //ignore spaces
+
+		if (s[i] == '{')
+		{
+			bool b = true;
+			while (s[i] && s[i] != '}') //reading an interpretation
+			{
+				i++;
+				if (s[i] == '!')
+					b = false;
+				else if (s[i] >= 'A' && s[i] <= 'Z')
+				{
+					if (atoms[s[i] - 'A'][0] != -1)
+					{
+						int k = 0;
+						while (k < 100 && atoms[s[i] - 'A'][k] != -1)
+						{
+							node[atoms[s[i] - 'A'][k]].addInterpret(b);
+							k++;
+						}
+						b = true;
+					}
+					else
+						cout << "Error: '" << s[i] << "' is not an atom in the given proposition.\n";
+				}
+			}
+			if (recInt(posTree1) == 1)
+			{
+				isEqual = false;
+				break;
+			}
+		}
+		i++;
+	}
+	return isEqual;
+}
+
+void simplify(int pos, int &startPos, bool &isChange)
+{
+
+}
+
+void simplifyu(int pos, int &startPos, bool &isChange)
+{	
+	if (node[pos].symbol == '^')
+	{
+		if (reverseCompareValues(node[pos].leaf[0], node[pos].leaf[1])) //annihilation
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Annihilation: " << exp << " ^ ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp<< " -> ";
+			}
+
+			node[pos].symbol = 'f';
+			deleteTree(node[pos].leaf[0]);
+			deleteTree(node[pos].leaf[1]);
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout <<exp<<'\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == 't' || isTautology(node[pos].leaf[0]) && false) // conjunction with tautology 1
+		{
+			if (verbose)
+			{
+				char exp[1000] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Conjunction with tautology: " << exp << " ^ ";
+				memset(exp, 0, 1000);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			int endPos = node[pos].leaf[1];
+			node[endPos].father = node[pos].father;
+			if (node[pos].father == -1)
+				startPos = endPos;
+			if (node[pos].father != -1)
+			{
+				if (pos == node[node[pos].father].leaf[1])
+					node[node[pos].father].leaf[1] = endPos;
+				else
+					node[node[pos].father].leaf[0] = endPos;
+				deleteTree(node[pos].leaf[0]);
+			}
+			else
+			{
+				deleteTree(node[pos].leaf[0]);
+				node[pos].deconstruct();
+			}
+			pos = endPos;
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1000] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[1]].symbol == 't' || isTautology(node[pos].leaf[1]) && false) // conjunction with tautology 2
+		{
+			if (verbose)
+			{
+				char exp[1000] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Conjunction with tautology: " << exp << " ^ ";
+				memset(exp, 0, 1000);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+			int endPos = node[pos].leaf[0];
+			node[endPos].father = node[pos].father;
+			if (node[pos].father == -1)
+				startPos = endPos;
+			if (node[pos].father != -1)
+			{
+				if (pos == node[node[pos].father].leaf[1])
+					node[node[pos].father].leaf[1] = endPos;
+				else
+					node[node[pos].father].leaf[0] = endPos;
+				deleteTree(node[pos].leaf[1]);
+			}
+			else
+			{
+				deleteTree(node[pos].leaf[1]);
+				node[pos].deconstruct();
+			}
+			pos = endPos;
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1000] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == 'f' || node[node[pos].leaf[1]].symbol == 'f' || isContradiction(node[pos].leaf[0]) || isContradiction(node[pos].leaf[1]) && false) // conjunction with contradiction
+		{
+			if (verbose)
+			{
+				char exp[1000] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Conjunction with contradiction: " << exp << " ^ ";
+				memset(exp, 0, 1000);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+			node[pos].symbol = 'f';
+			node[node[pos].leaf[0]].deconstruct();
+			node[node[pos].leaf[1]].deconstruct();
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1000] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (compareValues(node[pos].leaf[0], node[pos].leaf[1])) //idempocy simplification
+		{
+		if (verbose)
+		{
+			char exp[1000] = { 0 };
+			recTableExp(node[pos].leaf[0], 0, exp);
+			cout << "Idempocy: " << exp << " ^ ";
+			memset(exp, 0, 1000);
+			recTableExp(node[pos].leaf[1], 0, exp);
+			cout << exp << " -> ";
+		}
+		int endPos = node[pos].leaf[0];
+		node[endPos].father = node[pos].father;
+		if (node[pos].father == -1)
+			startPos = endPos;
+		if (node[pos].father != -1)
+		{
+			if (pos == node[node[pos].father].leaf[1])
+				node[node[pos].father].leaf[1] = endPos;
+			else
+				node[node[pos].father].leaf[0] = endPos;
+			deleteTree(node[pos].leaf[1]);
+		}
+		else
+		{
+			deleteTree(node[pos].leaf[1]);
+			node[pos].deconstruct();
+		}
+		pos = endPos;
+		isChange = true;
+
+		if (verbose)
+		{
+			char exp[1000] = { 0 };
+			recTableExp(pos, 0, exp);
+			cout << exp << '\n';
+		}
+		}
+		else if (node[node[pos].leaf[0]].symbol == 'v') //absorbtion 1
+		{
+			if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[0])) //side 1A
+			{
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " ^ ";
+					memset(exp, 0, 1000);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[1];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[0]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[0]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[1])) //side 1B
+			{
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " ^ ";
+					memset(exp, 0, 1000);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[1];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[0]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[0]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+		else if (node[node[pos].leaf[1]].symbol == 'v') // absorbtion 2
+		{
+			if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[0])) //side 2A
+			{
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " ^ ";
+					memset(exp, 0, 1000);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[0];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[1]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[1]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[1])) //side 2B
+			{
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " ^ ";
+					memset(exp, 0, 1000);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[0];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[1]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[1]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1000] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+	}
+
+	if(node[pos].symbol == 'v')
+	{
+		if (reverseCompareValues(node[pos].leaf[0], node[pos].leaf[1]))
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Annihilation: " << exp << " v ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 't';
+			deleteTree(node[pos].leaf[0]);
+			deleteTree(node[pos].leaf[1]);
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == 'f' || isContradiction(node[pos].leaf[0]) && false) // disjunction with contradiction 1
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Disjunction with contradiction: " << exp << " v ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			int endPos = node[pos].leaf[1];
+			node[endPos].father = node[pos].father;
+			if (node[pos].father == -1)
+				startPos = endPos;
+			if (node[pos].father != -1)
+			{
+				if (pos == node[node[pos].father].leaf[1])
+					node[node[pos].father].leaf[1] = endPos;
+				else
+					node[node[pos].father].leaf[0] = endPos;
+				deleteTree(node[pos].leaf[0]);
+			}
+			else
+			{
+				deleteTree(node[pos].leaf[0]);
+				node[pos].deconstruct();
+			}
+			pos = endPos;
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[1]].symbol == 'f' || isContradiction(node[pos].leaf[1]) && false) // conjunction with contradiction 2
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Disjunction with contradiction: " << exp << " v ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+			int endPos = node[pos].leaf[0];
+			node[endPos].father = node[pos].father;
+			if (node[pos].father == -1)
+				startPos = endPos;
+			if (node[pos].father != -1)
+			{
+				if (pos == node[node[pos].father].leaf[1])
+					node[node[pos].father].leaf[1] = endPos;
+				else
+					node[node[pos].father].leaf[0] = endPos;
+				deleteTree(node[pos].leaf[1]);
+			}
+			else
+			{
+				deleteTree(node[pos].leaf[1]);
+				node[pos].deconstruct();
+			}
+			pos = endPos;
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == 't' || node[node[pos].leaf[1]].symbol == 't' || isTautology(node[pos].leaf[0]) || isTautology(node[pos].leaf[1]) && false) // disjunction with contradiction
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Disjunction with tautology: " << exp << " v ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 't';
+			node[node[pos].leaf[0]].deconstruct();
+			node[node[pos].leaf[1]].deconstruct();
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (compareValues(node[pos].leaf[0], node[pos].leaf[1])) //idempocy simplification
+		{
+		if (verbose)
+		{
+			char exp[1001] = { 0 };
+			recTableExp(node[pos].leaf[0], 0, exp);
+			cout << "Idempocy: " << exp << " v ";
+			memset(exp, 0, 1001);
+			recTableExp(node[pos].leaf[1], 0, exp);
+			cout << exp << " -> ";
+		}
+
+		int endPos = node[pos].leaf[0];
+		node[endPos].father = node[pos].father;
+		if (node[pos].father == -1)
+			startPos = endPos;
+		if (node[pos].father != -1)
+		{
+			if (pos == node[node[pos].father].leaf[1])
+				node[node[pos].father].leaf[1] = endPos;
+			else
+				node[node[pos].father].leaf[0] = endPos;
+			deleteTree(node[pos].leaf[1]);
+		}
+		else
+		{
+			deleteTree(node[pos].leaf[1]);
+			node[pos].deconstruct();
+		}
+		pos = endPos;
+		isChange = true;
+
+		if (verbose)
+		{
+			char exp[1001] = { 0 };
+			recTableExp(pos, 0, exp);
+			cout << exp << '\n';
+		}
+		}
+		else if (node[node[pos].leaf[0]].symbol == '^') //absorbtion 1
+		{
+			if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[0])) //side 1A
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " v ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[1];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[0]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[0]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[1])) //side 1B
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " v ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[1];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[0]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[0]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+		else if (node[node[pos].leaf[1]].symbol == '^') // absorbtion 2
+		{
+			if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[0])) //side 2A
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " v ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[0];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[1]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[1]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[1])) //side 2B
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Absorbtion: " << exp << " v ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				int endPos = node[pos].leaf[0];
+				node[endPos].father = node[pos].father;
+				if (node[pos].father == -1)
+					startPos = endPos;
+				if (node[pos].father != -1)
+				{
+					if (pos == node[node[pos].father].leaf[1])
+						node[node[pos].father].leaf[1] = endPos;
+					else
+						node[node[pos].father].leaf[0] = endPos;
+					deleteTree(node[pos].leaf[1]);
+				}
+				else
+				{
+					deleteTree(node[pos].leaf[1]);
+					node[pos].deconstruct();
+				}
+				pos = endPos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+	}
+
+	if (node[pos].symbol == '=')
+	{
+		if (compareValues(node[pos].leaf[0], node[pos].leaf[1]))
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Annihilation: " << exp << " = ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 't';
+			deleteTree(node[pos].leaf[0]);
+			deleteTree(node[pos].leaf[1]);
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == '^') //other 1
+		{
+			if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[0])) //side 1A
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[0]].leaf[1];
+				deleteTree(node[node[pos].leaf[0]].leaf[0]);
+				node[node[pos].leaf[0]].deconstruct();
+
+				node[pos].leaf[0] = node[pos].leaf[1];
+				node[pos].leaf[1] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[1])) //side 1B
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[0]].leaf[0];
+				deleteTree(node[node[pos].leaf[0]].leaf[1]);
+				node[node[pos].leaf[0]].deconstruct();
+
+				node[pos].leaf[0] = node[pos].leaf[1];
+				node[pos].leaf[1] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+		else if (node[node[pos].leaf[1]].symbol == '^') //other 2
+		{
+			if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[0])) //side 2A
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[1]].leaf[1];
+				deleteTree(node[node[pos].leaf[1]].leaf[0]);
+				node[node[pos].leaf[1]].deconstruct();
+
+				node[pos].leaf[1] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[1])) //side 2B
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[1]].leaf[0];
+				deleteTree(node[node[pos].leaf[1]].leaf[1]);
+				node[node[pos].leaf[1]].deconstruct();
+
+				node[pos].leaf[1] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == 'v') //other 1
+		{
+			if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[0])) //side 1A
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[0]].leaf[1];
+				deleteTree(node[node[pos].leaf[0]].leaf[0]);
+				node[node[pos].leaf[0]].deconstruct();
+
+				node[pos].leaf[0] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[1], node[node[pos].leaf[0]].leaf[1])) //side 1B
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[0]].leaf[0];
+				deleteTree(node[node[pos].leaf[0]].leaf[1]);
+				node[node[pos].leaf[0]].deconstruct();
+
+				node[pos].leaf[0] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+		else if (node[node[pos].leaf[1]].symbol == 'v') //other 1
+		{
+			if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[0])) //side 1A
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[1]].leaf[1];
+				deleteTree(node[node[pos].leaf[1]].leaf[0]);
+				node[node[pos].leaf[1]].deconstruct();
+
+				node[pos].leaf[1] = node[pos].leaf[0];
+				node[pos].leaf[0] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+			else if (compareValues(node[pos].leaf[0], node[node[pos].leaf[1]].leaf[1])) //side 1B
+			{
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(node[pos].leaf[0], 0, exp);
+					cout << "Other: " << exp << " = ";
+					memset(exp, 0, 1001);
+					recTableExp(node[pos].leaf[1], 0, exp);
+					cout << exp << " -> ";
+				}
+
+				node[pos].symbol = '>';
+				int endPos = node[node[pos].leaf[1]].leaf[0];
+				deleteTree(node[node[pos].leaf[1]].leaf[1]);
+				node[node[pos].leaf[1]].deconstruct();
+
+				node[pos].leaf[1] = node[pos].leaf[0];
+				node[pos].leaf[0] = endPos;
+				node[endPos].father = pos;
+				startPos = pos;
+				isChange = true;
+
+				if (verbose)
+				{
+					char exp[1001] = { 0 };
+					recTableExp(pos, 0, exp);
+					cout << exp << '\n';
+				}
+			}
+		}
+	}
+
+	if (node[pos].symbol == '>')
+	{
+		if (node[node[pos].leaf[0]].symbol == 'f' || isContradiction(node[pos].leaf[0]))
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Contradiction implies: " << exp << " > ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 't';
+			node[node[pos].leaf[0]].deconstruct();
+			node[node[pos].leaf[1]].deconstruct();
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[1]].symbol == 't' || isTautology(node[pos].leaf[1]))
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Tautology is implied: " << exp << " > ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 't';
+			node[node[pos].leaf[0]].deconstruct();
+			node[node[pos].leaf[1]].deconstruct();
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (compareValues(node[pos].leaf[0], node[pos].leaf[1]))
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Annihilation: " << exp << " > ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 't';
+			deleteTree(node[pos].leaf[0]);
+			deleteTree(node[pos].leaf[1]);
+			node[pos].leaf[0] = -1;
+			node[pos].leaf[1] = -1;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+	}
+
+	if (node[pos].symbol == '!')
+	{
+		if (node[node[pos].leaf[0]].symbol == '!') //double negation
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << "Double negation: " << exp << " -> ";
+			}
+
+			int endPos = node[node[pos].leaf[0]].leaf[0];
+			node[endPos].father = node[pos].father;
+			if (node[pos].father != -1)
+			{
+				if (pos == node[node[pos].father].leaf[1])
+					node[node[pos].father].leaf[1] = endPos;
+				else
+					node[node[pos].father].leaf[0] = endPos;
+			}
+			else
+				startPos = endPos;
+			node[node[pos].leaf[0]].deconstruct();
+			node[pos].deconstruct();
+			pos = endPos;
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == 't' || isTautology(node[pos].leaf[0]))
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << "Negation of tautology: " << exp << " -> f";
+			}
+
+			node[pos].symbol = 'f';
+			deleteTree(node[pos].leaf[0]);
+			node[pos].leaf[0] = -1;
+
+			isChange = true;
+		}
+		else if (node[node[pos].leaf[0]].symbol == 'f' || isContradiction(node[pos].leaf[0]))
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << "Negation of contradiction: " << exp << " -> t";
+			}
+
+			node[pos].symbol = 't';
+			deleteTree(node[pos].leaf[0]);
+			node[pos].leaf[0] = -1;
+
+			isChange = true;
+		}
+	}
+
+	//parsing
+	if (node[pos].symbol == '!')
+	{
+		simplify(node[pos].leaf[0], startPos, isChange);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		simplify(node[pos].leaf[0], startPos, isChange);
+		simplify(node[pos].leaf[1], startPos, isChange);
+	}
+}
+
+void eliminateEquiv(int pos, bool &isChange)
+{
+	if (node[pos].symbol == '=')
+	{
+		if (verbose)
+		{
+			char exp[1001] = { 0 };
+			recTableExp(node[pos].leaf[0], 0, exp);
+			cout << "Reduction: " << exp << " = ";
+			memset(exp, 0, 1001);
+			recTableExp(node[pos].leaf[1], 0, exp);
+			cout << exp << " -> ";
+		}
+
+		node[pos].symbol = '^';
+		int newStartPos1 = -1, newStartPos2 = -1; //must initialise with -1 for copytree
+		copyTree(node[pos].leaf[0], newStartPos1);
+		copyTree(node[pos].leaf[1], newStartPos2);
+
+		int impl1 = getFreeNode(1000);
+		node[impl1].construct('>', pos, node[pos].leaf[0], node[pos].leaf[1]);
+		node[node[pos].leaf[0]].father = impl1;
+		node[node[pos].leaf[1]].father = impl1;
+
+		int impl2 = getFreeNode(1000);
+		node[impl2].construct('>', pos, newStartPos2, newStartPos1);
+		node[newStartPos1].father = impl2;
+		node[newStartPos2].father = impl2;
+
+		node[pos].leaf[0] = impl1;
+		node[pos].leaf[1] = impl2;
+
+		isChange = true;
+
+		if (verbose)
+		{
+			char exp[1001] = { 0 };
+			recTableExp(pos, 0, exp);
+			cout << exp << '\n';
+		}
+	}
+
+	//parsing
+	if (node[pos].symbol == '!')
+	{
+		eliminateEquiv(node[pos].leaf[0], isChange);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		eliminateEquiv(node[pos].leaf[0], isChange);
+		eliminateEquiv(node[pos].leaf[1], isChange);
+	}
+}
+
+void eliminateImpl(int pos, bool &isChange)
+{
+	if (node[pos].symbol == '>')
+	{
+		if (verbose)
+		{
+			char exp[1001] = { 0 };
+			recTableExp(node[pos].leaf[0], 0, exp);
+			cout << "Reduction: " << exp << " > ";
+			memset(exp, 0, 1001);
+			recTableExp(node[pos].leaf[1], 0, exp);
+			cout << exp << " -> ";
+		}
+
+		node[pos].symbol = 'v';
+		
+		int newPos = getFreeNode(1000);
+		node[newPos].construct('!', pos, node[pos].leaf[0], -1);
+		node[node[pos].leaf[0]].father = newPos;
+		node[pos].leaf[0] = newPos;
+		
+		isChange = true;
+
+		if (verbose)
+		{
+			char exp[1001] = { 0 };
+			recTableExp(pos, 0, exp);
+			cout << exp << '\n';
+		}
+	}
+
+	//parsing
+	if (node[pos].symbol == '!')
+	{
+		eliminateImpl(node[pos].leaf[0], isChange);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		eliminateImpl(node[pos].leaf[0], isChange);
+		eliminateImpl(node[pos].leaf[1], isChange);
+	}
+}
+
+void eliminateBigNeg(int pos, int &startPos, bool &isChange)
+{
+	if (node[pos].symbol == '!')
+	{
+		if (node[node[pos].leaf[0]].symbol == 'v')
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << "De Morgan: " << exp << " -> ";
+			}
+
+			node[pos].symbol = '^';
+
+			int newPos = getFreeNode(1000);
+			node[newPos].construct('!', pos, node[node[pos].leaf[0]].leaf[1], -1);
+			node[pos].leaf[1] = newPos;
+			node[node[node[pos].leaf[0]].leaf[1]].father = newPos;
+
+			node[node[pos].leaf[0]].symbol = '!';
+			node[node[pos].leaf[0]].leaf[1] = -1;
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == '^')
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << "De Morgan: " << exp << " -> ";
+			}
+
+			node[pos].symbol = 'v';
+
+			int newPos = getFreeNode(1000);
+			node[newPos].construct('!', pos, node[node[pos].leaf[0]].leaf[1], -1);
+			node[pos].leaf[1] = newPos;
+			node[node[node[pos].leaf[0]].leaf[1]].father = newPos;
+
+			node[node[pos].leaf[0]].symbol = '!';
+			node[node[pos].leaf[0]].leaf[1] = -1;
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		else if (node[node[pos].leaf[0]].symbol == '!') //double negation
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << "Double Negation: " << exp << " -> ";
+			}
+
+			int endPos = node[node[pos].leaf[0]].leaf[0];
+			node[endPos].father = node[pos].father;
+			if (node[pos].father != -1)
+			{
+				if (pos == node[node[pos].father].leaf[1])
+					node[node[pos].father].leaf[1] = endPos;
+				else
+					node[node[pos].father].leaf[0] = endPos;
+			}
+			if (node[pos].father == -1)
+				startPos = endPos;
+			node[node[pos].leaf[0]].deconstruct();
+			node[pos].deconstruct();
+			pos = endPos;
+	
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+	}
+
+	//parsing
+	if (node[pos].symbol == '!')
+	{
+			eliminateBigNeg(node[pos].leaf[0], startPos, isChange);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+			eliminateBigNeg(node[pos].leaf[0], startPos, isChange);
+			eliminateBigNeg(node[pos].leaf[1], startPos, isChange);
+	}
+}
+
+void getNNF(char exp[])
+{
+	int startPos = 0; bool change = false, s_change = false;
+
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+
+	eliminateEquiv(startPos, change);
+	clearAtomsList();
+	updateAtomsList(startPos);
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+	while (change)
+	{
+		change = false;
+		eliminateEquiv(startPos, change);
+		clearAtomsList();
+		updateAtomsList(startPos);
+
+		simplify(0, startPos, s_change);
+		while (s_change)
+		{
+			s_change = false;
+			simplify(startPos, startPos, s_change);
+		}
+	}
+	eliminateImpl(startPos, change);
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+	while (change)
+	{
+		change = false;
+		eliminateImpl(startPos, change);
+		simplify(0, startPos, s_change);
+		while (s_change)
+		{
+			s_change = false;
+			simplify(startPos, startPos, s_change);
+		}
+	}
+
+	eliminateBigNeg(startPos, startPos, change);
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+	while (change)
+	{
+		change = false;
+		eliminateBigNeg(startPos, startPos, change);
+		simplify(0, startPos, s_change);
+
+		while (s_change)
+		{
+			s_change = false;
+			simplify(startPos, startPos, s_change);
+		}
+	}
+
+	defragmentTree(startPos);
+
+	exp[0] = 0;
+	recTableExp(0, 0, exp); cout <<"exp"<< exp << '\n';
+}
+
+void eliminateBigConj(int pos, bool &isChange)
+{
+	if (node[pos].symbol == '^')
+	{
+		if (node[node[pos].leaf[0]].symbol == 'v')
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Distribution: " << exp << " ^ ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 'v';
+			node[node[pos].leaf[0]].symbol = '^';
+
+			int newPos1 = -1; //must initialise with -1 for copytree
+			copyTree(node[pos].leaf[1], newPos1);
+
+			int savePos = node[pos].leaf[1];
+
+			int newPos2 = getFreeNode(1000);
+			node[newPos2].construct('^', pos, newPos1, node[node[pos].leaf[0]].leaf[0]);
+			node[newPos1].father = newPos2;
+			node[node[node[pos].leaf[0]].leaf[0]].father = newPos2;
+			node[pos].leaf[1] = newPos2;
+
+			node[node[pos].leaf[0]].leaf[0] = savePos;
+			node[savePos].father = node[pos].leaf[0];
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		if (node[node[pos].leaf[1]].symbol == 'v')
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Distribution: " << exp << " ^ ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = 'v';
+			node[node[pos].leaf[1]].symbol = '^';
+
+			int newPos1 = -1; //must initialise with -1 for copytree
+			copyTree(node[pos].leaf[0], newPos1);
+
+			int savePos = node[pos].leaf[0];
+
+			int newPos2 = getFreeNode(1000);
+			node[newPos2].construct('^', pos, newPos1, node[node[pos].leaf[1]].leaf[0]);
+			node[newPos1].father = newPos2;
+			node[node[node[pos].leaf[1]].leaf[0]].father = newPos2;
+			node[pos].leaf[0] = newPos2;
+
+			node[node[pos].leaf[1]].leaf[0] = savePos;
+			node[savePos].father = node[pos].leaf[0];
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+	}
+
+	//parsing
+	if (node[pos].symbol == '!')
+	{
+		eliminateBigConj(node[pos].leaf[0], isChange);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		eliminateBigConj(node[pos].leaf[0], isChange);
+		eliminateBigConj(node[pos].leaf[1], isChange);
+	}
+}
+
+void eliminateBigDisj(int pos, bool &isChange)
+{
+	if (node[pos].symbol == 'v')
+	{
+		if (node[node[pos].leaf[0]].symbol == '^')
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Distribution: " << exp << " v ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = '^';
+			node[node[pos].leaf[0]].symbol = 'v';
+
+			int newPos1 = -1; //must initialise with -1 for copytree
+			copyTree(node[pos].leaf[1], newPos1);
+
+			int savePos = node[pos].leaf[1];
+
+			int newPos2 = getFreeNode(1000);
+			node[newPos2].construct('v', pos, newPos1, node[node[pos].leaf[0]].leaf[0]);
+			node[newPos1].father = newPos2;
+			node[node[node[pos].leaf[0]].leaf[0]].father = newPos2;
+			node[pos].leaf[1] = newPos2;
+
+			node[node[pos].leaf[0]].leaf[0] = savePos;
+			node[savePos].father = node[pos].leaf[0];
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+		if (node[node[pos].leaf[1]].symbol == '^')
+		{
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(node[pos].leaf[0], 0, exp);
+				cout << "Distribution: " << exp << " v ";
+				memset(exp, 0, 1001);
+				recTableExp(node[pos].leaf[1], 0, exp);
+				cout << exp << " -> ";
+			}
+
+			node[pos].symbol = '^';
+			node[node[pos].leaf[1]].symbol = 'v';
+
+			int newPos1 = -1; //must initialise with -1 for copytree
+			copyTree(node[pos].leaf[0], newPos1);
+
+			int savePos = node[pos].leaf[0];
+
+			int newPos2 = getFreeNode(1000);
+			node[newPos2].construct('v', pos, newPos1, node[node[pos].leaf[1]].leaf[0]);
+			node[newPos1].father = newPos2;
+			node[node[node[pos].leaf[1]].leaf[0]].father = newPos2;
+			node[pos].leaf[0] = newPos2;
+
+			node[node[pos].leaf[1]].leaf[0] = savePos;
+			node[savePos].father = node[pos].leaf[0];
+
+			isChange = true;
+
+			if (verbose)
+			{
+				char exp[1001] = { 0 };
+				recTableExp(pos, 0, exp);
+				cout << exp << '\n';
+			}
+		}
+	}
+
+	//parsing
+	if (node[pos].symbol == '!')
+	{
+		eliminateBigDisj(node[pos].leaf[0], isChange);
+	}
+	else if (node[pos].symbol == '^' || node[pos].symbol == 'v' || node[pos].symbol == '>' || node[pos].symbol == '=' || node[pos].symbol == '*' || node[pos].symbol == '|')
+	{
+		eliminateBigDisj(node[pos].leaf[0], isChange);
+		eliminateBigDisj(node[pos].leaf[1], isChange);
+	}
+}
+
+void getDNF(char exp[])
+{
+	int startPos = 0; bool change = false, s_change = false;
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+	eliminateBigConj(startPos, change);
+	clearAtomsList();
+	updateAtomsList(startPos);
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+	while (change)
+	{
+		change = false;
+		eliminateBigConj(startPos, change);
+		clearAtomsList();
+		updateAtomsList(startPos);
+		simplify(0, startPos, s_change);
+		while (s_change)
+		{
+			s_change = false;
+			simplify(startPos, startPos, s_change);
+		}
+	}
+
+	defragmentTree(startPos);
+	exp[0] = 0;
+	recTableExp(0, 0, exp); cout << "exp" << exp << '\n';
+}
+
+void getCNF(char exp[])
+{
+	int startPos = 0; bool change = false, s_change = false;
+
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+
+	eliminateBigDisj(startPos, change);
+	clearAtomsList();
+	updateAtomsList(startPos);
+	simplify(0, startPos, s_change);
+	while (s_change)
+	{
+		s_change = false;
+		simplify(startPos, startPos, s_change);
+	}
+	while (change)
+	{
+		change = false;
+		eliminateBigDisj(startPos, change);
+		clearAtomsList();
+		updateAtomsList(startPos);
+		simplify(0, startPos, s_change);
+		while (s_change)
+		{
+			s_change = false;
+			simplify(startPos, startPos, s_change);
+		}
+	}
+
+	defragmentTree(startPos);
+	exp[0] = 0;
+	recTableExp(0, 0, exp); cout << "exp" << exp << '\n';
+}
+
+
 int main()
 {
+	verbose = true;
 	int pos = 0;
 	for (int i = 0; i < 26; i++) for (int j = 0; j < 100; j++) atoms[i][j] = -1;
 	bool error = false;
 
 	//init atom list
-	for (int i = 0; i < 26; i++)
-		for (int j = 0; j < 1000; j++)
-			atoms[i][j] = -1;
+	clearAtomsList();
 
 	//read string
-	char inputLine[1001] = { 0 }, expression[1001] = { 0 }, interpretation[1001] = { 0 };
+	char inputLine[1001] = { 0 }, expression[1001] = { 0 }, interpretation[10001] = { 0 };
 	cin.getline(inputLine, 1000);
 
 	int lineI = 0, intI = 0;
-	while (inputLine[lineI] && inputLine[lineI] != '|')
+	while (inputLine[lineI] && inputLine[lineI] != '#')
 	{
 		expression[lineI] = inputLine[lineI];
 		lineI++;
@@ -835,6 +2848,35 @@ int main()
 
 	//build tree
 	getTree(expression);
+
+	/*
+	//NNF
+	char NNFexp[1000];
+	getNNF(NNFexp);
+	clearTree(1000);
+	getTree(NNFexp);
+	*/
+	/*
+	//DNF
+	char DNFexp[1000];
+	getDNF(DNFexp);
+	clearTree(1000);
+	getTree(DNFexp);
+	*/
+	/*
+	//CNF
+	char CNFexp[1000];
+	getCNF(CNFexp);
+	clearTree(1000);
+	getTree(CNFexp);
+	*/
+	/*
+	int sp = 0; bool change = false;
+	simplify(0, sp, change);
+	char exp[1000] = { 0 };
+	recTableExp(sp, 0, exp);
+	cout << "           " << exp << '\n';
+	*/
 
 	//drawTree
 	for (int i = 0; i < 100; i++)
@@ -864,7 +2906,7 @@ int main()
 	for(int i = 0; interpretation[i]; i++)
 		if (interpretation[i] == '@')
 		{
-			memset(interpretation, 0, 1001);
+			memset(interpretation, 0, 10001);
 			getAllInterpretations(getAtomCount(), interpretation);
 			break;
 		}
@@ -873,7 +2915,7 @@ int main()
 	int interpretationCnt;
 	if (interpretation[0] != 0)
 	{
-		cout << "Logic evaluation based on given interpretations:"<< interpretation[0] <<"\n";
+		cout << "Logic evaluation based on given interpretations:"<< interpretation <<"\n";
 		interpretationCnt = readInterpretation(interpretation);
 
 		int tableLen = buildTable();
